@@ -1,0 +1,63 @@
+name: 공고 수집 및 배포
+
+on:
+  schedule:
+    - cron: '17 21 * * *' # 매일 06:17 KST
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      DATA_GO_KR_KEY: ${{ secrets.DATA_GO_KR_KEY }}
+      KAKAO_REST_KEY: ${{ secrets.KAKAO_REST_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+
+      - name: 공고 수집
+        if: ${{ env.DATA_GO_KR_KEY != '' }}
+        run: npm run fetch:data
+        continue-on-error: true
+
+      - name: 수집 데이터 커밋
+        if: ${{ github.event_name != 'push' && env.DATA_GO_KR_KEY != '' }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public/data/notices.json data/geocache.json || true
+          git diff --cached --quiet || (git commit -m "data: 공고 갱신 $(date -u +%F) [skip ci]" && git push)
+
+      - run: npm test
+      - name: 빌드
+        env:
+          VITE_KAKAO_JS_KEY: ${{ secrets.KAKAO_JS_KEY }}
+        run: npm run build
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

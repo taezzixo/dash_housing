@@ -1,0 +1,290 @@
+{
+ "generatedAt": "2026-11-08T12:29:06.864Z",
+ "sample": true,
+ "sources": [
+  "샘플 데이터(실제 공고 아님)"
+ ],
+ "notices": [
+  {
+   "source": "applyhome",
+   "name": "[샘플] 서초 리버파크",
+   "geoPrecision": "address",
+   "id": "s1",
+   "category": "APT",
+   "subType": "민영",
+   "address": "서울특별시 서초구 반포동",
+   "region": "서울",
+   "lat": 37.5049,
+   "lng": 126.9966,
+   "totalUnits": 320,
+   "flags": {
+    "speculative": true,
+    "adjusted": true,
+    "priceCap": true
+   },
+   "dates": {
+    "announce": "2026-11-02",
+    "specialStart": "2026-11-16",
+    "specialEnd": "2026-11-16",
+    "rank1Start": "2026-11-17",
+    "rank1End": "2026-11-18",
+    "rank2Start": "2026-11-19",
+    "rank2End": "2026-11-19",
+    "receiptStart": "2026-11-16",
+    "receiptEnd": "2026-11-19",
+    "winner": "2026-11-25",
+    "contractStart": "2026-12-07",
+    "contractEnd": "2026-12-09"
+   },
+   "models": [
+    {
+     "type": "059.9800A",
+     "area": 59.98,
+     "general": 40,
+     "special": 60,
+     "priceMax": 145000,
+     "specialBreakdown": {
+      "newlywed": 20,
+      "firstLife": 15,
+      "multiChild": 10,
+      "oldParents": 3,
+      "newborn": 8,
+      "institution": 4
+     }
+    },
+    {
+     "type": "084.9500B",
+     "area": 84.95,
+     "general": 90,
+     "special": 70,
+     "priceMax": 198000,
+     "specialBreakdown": {
+      "newlywed": 25,
+      "firstLife": 15,
+      "multiChild": 15,
+      "oldParents": 5,
+      "newborn": 10
+     }
+    }
+   ]
+  },
+  {
+   "source": "applyhome",
+   "name": "[샘플] 수원 광교 그린시티",
+   "geoPrecision": "address",
+   "id": "s2",
+   "category": "APT",
+   "subType": "민영",
+   "address": "경기도 수원시 영통구 이의동",
+   "region": "경기",
+   "lat": 37.2856,
+   "lng": 127.0513,
+   "totalUnits": 540,
+   "dates": {
+    "announce": "2026-11-05",
+    "specialStart": "2026-11-18",
+    "specialEnd": "2026-11-18",
+    "rank1Start": "2026-11-19",
+    "rank1End": "2026-11-20",
+    "receiptStart": "2026-11-18",
+    "receiptEnd": "2026-11-21",
+    "winner": "2026-11-27",
+    "contractStart": "2026-12-09",
+    "contractEnd": "2026-12-11"
+   },
+   "models": [
+    {
+     "type": "074.8900A",
+     "area": 74.89,
+     "general": 120,
+     "special": 110,
+     "priceMax": 72000,
+     "specialBreakdown": {
+      "newlywed": 40,
+      "firstLife": 30,
+      "multiChild": 20,
+      "newborn": 15
+     }
+    }
+   ]
+  },
+  {
+   "source": "applyhome",
+   "name": "[샘플] 인천 검단 뉴홈",
+   "geoPrecision": "address",
+   "id": "s3",
+   "category": "APT",
+   "subType": "국민",
+   "address": "인천광역시 서구 원당동",
+   "region": "인천",
+   "lat": 37.5933,
+   "lng": 126.6714,
+   "totalUnits": 800,
+   "flags": {
+    "publicHouseZone": true
+   },
+   "dates": {
+    "announce": "2026-11-06",
+    "specialStart": "2026-11-24",
+    "specialEnd": "2026-11-26",
+    "rank1Start": "2026-11-27",
+    "rank1End": "2026-11-27",
+    "receiptStart": "2026-11-24",
+    "receiptEnd": "2026-11-28",
+    "winner": "2026-12-10",
+    "contractStart": "2026-12-22",
+    "contractEnd": "2026-12-24"
+   },
+   "models": [
+    {
+     "type": "051.9000",
+     "area": 51.9,
+     "general": 100,
+     "special": 300,
+     "priceMax": 31000,
+     "specialBreakdown": {
+      "newlywed": 80,
+      "firstLife": 80,
+      "youth": 60,
+      "newborn": 60,
+      "multiChild": 20
+     }
+    }
+   ]
+  },
+  {
+   "source": "applyhome",
+   "name": "[샘플] 부산 해운대 오션뷰",
+   "geoPrecision": "address",
+   "id": "s4",
+   "category": "OFFICETEL",
+   "subType": "오피스텔",
+   "address": "부산광역시 해운대구 우동",
+   "region": "부산",
+   "lat": 35.1631,
+   "lng": 129.1636,
+   "totalUnits": 280,
+   "dates": {
+    "announce": "2026-11-03",
+    "receiptStart": "2026-11-12",
+    "receiptEnd": "2026-11-13",
+    "winner": "2026-11-17",
+    "contractStart": "2026-11-19",
+    "contractEnd": "2026-11-20"
+   },
+   "models": [
+    {
+     "type": "A",
+     "area": 29.5,
+     "general": 180,
+     "special": 0,
+     "priceMax": 32000
+    },
+    {
+     "type": "B",
+     "area": 44.8,
+     "general": 100,
+     "special": 0,
+     "priceMax": 48000
+    }
+   ]
+  },
+  {
+   "source": "applyhome",
+   "name": "[샘플] 대전 도안 무순위",
+   "geoPrecision": "address",
+   "id": "s5",
+   "category": "REMNDR",
+   "subType": "무순위",
+   "address": "대전광역시 유성구 학하동",
+   "region": "대전",
+   "lat": 36.3418,
+   "lng": 127.3001,
+   "totalUnits": 12,
+   "dates": {
+    "announce": "2026-11-07",
+    "receiptStart": "2026-11-14",
+    "receiptEnd": "2026-11-14",
+    "winner": "2026-11-18",
+    "contractStart": "2026-11-21",
+    "contractEnd": "2026-11-21"
+   },
+   "models": [
+    {
+     "type": "084.0000",
+     "area": 84,
+     "general": 12,
+     "special": 0,
+     "priceMax": 56000
+    }
+   ]
+  },
+  {
+   "source": "applyhome",
+   "name": "[샘플] 고양 창릉 민간임대",
+   "geoPrecision": "address",
+   "id": "s6",
+   "category": "PBL_PVT_RENT",
+   "subType": "공공지원민간임대",
+   "address": "경기도 고양시 덕양구 용두동",
+   "region": "경기",
+   "lat": 37.6345,
+   "lng": 126.8763,
+   "totalUnits": 420,
+   "dates": {
+    "announce": "2026-10-28",
+    "receiptStart": "2026-11-20",
+    "receiptEnd": "2026-11-22",
+    "winner": "2026-12-05",
+    "contractStart": "2026-12-15",
+    "contractEnd": "2026-12-17"
+   },
+   "models": [
+    {
+     "type": "59A",
+     "area": 59,
+     "general": 300,
+     "special": 120,
+     "priceMax": 0,
+     "specialBreakdown": {
+      "youth": 60,
+      "newlywed": 50,
+      "oldParents": 10
+     }
+    }
+   ]
+  },
+  {
+   "id": "s7",
+   "source": "lh",
+   "category": "LH",
+   "subType": "행복주택",
+   "name": "[샘플] 세종 행복주택 입주자 모집",
+   "region": "세종",
+   "lat": 36.4875,
+   "lng": 127.2817,
+   "geoPrecision": "region",
+   "status": "공고중",
+   "dates": {
+    "announce": "2026-11-04",
+    "receiptEnd": "2026-11-30"
+   }
+  },
+  {
+   "id": "s8",
+   "source": "lh",
+   "category": "LH",
+   "subType": "국민임대",
+   "name": "[샘플] 광주 국민임대 예비입주자 모집",
+   "region": "광주",
+   "lat": 35.1595,
+   "lng": 126.8526,
+   "geoPrecision": "region",
+   "status": "공고중",
+   "dates": {
+    "announce": "2026-10-30",
+    "receiptEnd": "2026-11-20"
+   }
+  }
+ ]
+}
