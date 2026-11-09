@@ -26,7 +26,12 @@ export function eventsOf(n: Notice): ScheduleEvent[] {
     if (!start) continue;
     out.push({ noticeId: n.id, title: `[${kind}] ${n.name}`, kind, start, end: e ? n.dates[e] : undefined });
   }
-  return out;
+  // 공고 본문에서 추출한 기타 일정 (서류 제출 마감 등)
+  for (const x of n.extraSchedule ?? []) {
+    const start = x.start ?? x.end;
+    if (start) out.push({ noticeId: n.id, title: `[${x.label}] ${n.name}`, kind: x.label, start, end: x.start ? x.end : undefined });
+  }
+  return out.sort((a, b) => a.start.localeCompare(b.start));
 }
 
 // 다음 일정 (오늘 이후 가장 가까운 것)

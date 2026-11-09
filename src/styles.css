@@ -297,3 +297,24 @@ fieldset label.check {
 .related { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
 .related li { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
 .related .link { width: 100%; }
+.legend span { display: inline-flex; align-items: center; gap: 4px; }
+.legend small { color: var(--muted); }
+.legend .sep { width: 1px; height: 12px; background: var(--line); }
+.alert.soft { background: var(--warn-soft); color: var(--warn); margin: 10px 0 0; }
+.alert.soft a { color: inherit; }
+
+/* ---- 계정 저장 (Supabase 설정 시) ---- */
+.top { position: relative; }
+.account { position: absolute; top: 10px; right: 16px; z-index: 30; }
+.account > .btn { padding: 6px 12px; font-size: 13px; }
+.popover {
+  position: absolute; right: 0; top: calc(100% + 6px); width: min(340px, calc(100vw - 32px));
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(0,0,0,.18); padding: 14px; display: flex; flex-direction: column; gap: 8px; font-size: 14px;
+}
+.popover p { margin: 0; }
+.popover .check { display: grid; grid-template-columns: 18px 1fr; gap: 8px; align-items: start; white-space: normal; font-size: 13px; }
+.popover .row { display: flex; gap: 6px; flex-wrap: wrap; }
+.btn.kakao { background: #fee500; color: #191919; border-color: #fee500; font-weight: 700; }
+.btn.kakao:disabled, .popover .btn:disabled { opacity: .45; }
+.danger-text { color: #dc2626; align-self: flex-start; }

@@ -5,6 +5,7 @@ import { CRITERIA_VERSIONS } from '../config/criteria.ts';
 import { REGIONS } from '../lib/profile.ts';
 import { recentlyChanged } from '../lib/filters.ts';
 import { todayKST } from '../lib/schedule.ts';
+import { accountEnabled, adminStats } from '../lib/account.ts';
 
 // 관리자페이지 (A4 ①조회 + ②수동 보정)
 // 서버 없음: 공개 데이터 파일을 읽어 보여주고, 수정은 GitHub에서 overrides.json을 편집한다.
@@ -13,7 +14,7 @@ const EDIT_OVERRIDES = `https://github.com/${REPO}/edit/main/public/data/overrid
 const ACTIONS = `https://github.com/${REPO}/actions/workflows/deploy.yml`;
 const GEO_LABEL: Record<string, string> = { address: '주소 정확', district: '시군구·동 근사', region: '시·도 중심', none: '위치 없음' };
 
-type Section = 'run' | 'quality' | 'changes' | 'manual' | 'criteria';
+type Section = 'run' | 'quality' | 'changes' | 'manual' | 'members' | 'criteria';
 
 export default function AdminApp() {
   const [file, setFile] = useState<NoticeFile | null>(null);
@@ -45,7 +46,7 @@ export default function AdminApp() {
         </div>
       </header>
       <nav className="admin-tabs">
-        {([['run', '수집 현황'], ['quality', '데이터 품질'], ['changes', '변경 감지'], ['manual', '수동 보정'], ['criteria', '판정 기준']] as const).map(([k, l]) => (
+        {([['run', '수집 현황'], ['quality', '데이터 품질'], ['changes', '변경 감지'], ['manual', '수동 보정'], ['members', '회원'], ['criteria', '판정 기준']] as const).map(([k, l]) => (
           <button key={k} className={sec === k ? 'on' : ''} onClick={() => setSec(k)}>{l}</button>
         ))}
       </nav>
@@ -54,6 +55,7 @@ export default function AdminApp() {
         {sec === 'quality' && <QualityPanel notices={notices} />}
         {sec === 'changes' && <ChangesPanel notices={notices} today={today} />}
         {sec === 'manual' && <ManualPanel ov={ov} notices={notices} />}
+        {sec === 'members' && <MembersPanel notices={notices} />}
         {sec === 'criteria' && <CriteriaPanel />}
       </main>
     </div>
@@ -101,25 +103,42 @@ function RunPanel({ log }: { log: RunLog | null }) {
 }
 
 function QualityPanel({ notices }: { notices: Notice[] }) {
-  const [filter, setFilter] = useState<'none' | 'region' | 'district'>('none');
+  const [filter, setFilter] = useState<string>('none');
   const dist = useMemo(() => {
     const m: Record<string, number> = {};
     for (const n of notices) m[n.geoPrecision ?? 'none'] = (m[n.geoPrecision ?? 'none'] ?? 0) + 1;
     return m;
   }, [notices]);
-  const list = notices.filter((n) => (n.geoPrecision ?? 'none') === filter);
+  const issues = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const n of notices) for (const x of n.issues ?? []) m[x] = (m[x] ?? 0) + 1;
+    return Object.entries(m).sort((a, b) => b[1] - a[1]);
+  }, [notices]);
+  const list = filter.startsWith('issue:')
+    ? notices.filter((n) => n.issues?.includes(filter.slice(6)))
+    : notices.filter((n) => (n.geoPrecision ?? 'none') === filter);
   return (
     <>
+      <h3>지도 위치 정확도</h3>
       <div className="cards">
         {['address', 'district', 'region', 'none'].map((k) => (
-          <button key={k} className={`card ${filter === k ? 'sel' : ''}`} onClick={() => k !== 'address' && setFilter(k as typeof filter)}>
+          <button key={k} className={`card ${filter === k ? 'sel' : ''}`} onClick={() => k !== 'address' && setFilter(k)}>
             <b>{GEO_LABEL[k]}</b><span className="big">{(dist[k] ?? 0).toLocaleString()}</span>
           </button>
         ))}
       </div>
+      <h3>정합성 점검 (빠진 정보·일정 순서 이상)</h3>
+      <div className="cards">
+        {issues.map(([k, v]) => (
+          <button key={k} className={`card ${filter === 'issue:' + k ? 'sel' : ''}`} onClick={() => setFilter('issue:' + k)}>
+            <b>{k}</b><span className="big">{v.toLocaleString()}</span>
+          </button>
+        ))}
+        {!issues.length && <p className="muted small">점검 결과가 아직 없습니다 (다음 수집 후 표시).</p>}
+      </div>
       <p className="muted small">
-        위치를 고치려면 아래 "보정값 복사"를 누르세요. 복사된 내용을 GitHub의 overrides.json `patch` 안에 붙여넣고 좌표를 고칩니다.
-        좌표는 카카오맵에서 해당 위치를 길게 눌러 확인할 수 있습니다.
+        위치를 고치려면 "보정값 복사"를 눌러 GitHub의 overrides.json `patch`에 붙여넣고 좌표를 고칩니다(카카오맵에서 위치를 길게 누르면 좌표 확인).
+        일정·주소가 빠진 공고는 원문을 보고 patch에 address 등을 넣을 수 있습니다.
       </p>
       <List notices={list.slice(0, 200)} action={(n) => <CopyBtn text={`"${n.id}": { "lat": ${n.lat ?? 0}, "lng": ${n.lng ?? 0}, "note": "" },`} label="보정값 복사" />} />
       {list.length > 200 && <p className="muted small">상위 200건만 표시</p>}
@@ -201,6 +220,33 @@ function ManualPanel({ ov, notices }: { ov: Overrides | null; notices: Notice[] 
 
       <h3>현재 수동 등록 공고</h3>
       <List notices={notices.filter((n) => n.manual)} />
+    </>
+  );
+}
+
+// 회원 통계 (집계만, 개인별 내용은 보지 않음)
+function MembersPanel({ notices }: { notices: Notice[] }) {
+  const [st, setSt] = useState<Record<string, any> | null | undefined>(undefined);
+  useEffect(() => {
+    adminStats().then(setSt).catch(() => setSt(null));
+  }, []);
+  if (!accountEnabled) return <p className="muted">계정 저장 기능이 꺼져 있습니다. Supabase 설정 후 표시됩니다 (docs/ACCOUNT.md).</p>;
+  if (st === undefined) return <p className="muted">불러오는 중…</p>;
+  if (!st) return <p className="muted">통계를 불러오지 못했습니다. supabase/schema.sql 실행 여부를 확인하세요.</p>;
+  const name = (id: string) => notices.find((n) => n.id === id)?.name ?? id;
+  return (
+    <>
+      <div className="cards">
+        <div className="card"><b>가입자</b><span className="big">{st.members}</span></div>
+        <div className="card"><b>최근 7일 접속</b><span className="big">{st.members_7d}</span></div>
+        <div className="card"><b>소득·자산 서버 저장</b><span className="big">{st.with_financial}</span></div>
+        <div className="card"><b>관심 공고 저장 수</b><span className="big">{st.saved_total}</span></div>
+      </div>
+      <h3>많이 저장된 공고 TOP 10</h3>
+      <ol className="small">{(st.top_saved ?? []).map((t: any) => <li key={t.notice_id}>{name(t.notice_id)} — {t.cnt}명</li>)}</ol>
+      <h3>회원 거주지 분포</h3>
+      <p className="small">{Object.entries(st.regions ?? {}).map(([k, v]) => `${k || '미입력'} ${v}`).join(' · ') || '-'}</p>
+      <p className="muted small">개인별 조건·소득은 관리자도 볼 수 없도록 집계만 제공합니다.</p>
     </>
   );
 }

@@ -86,3 +86,30 @@ test('마감일 없는 공고의 종료일 추정 (클라이언트 상태와 일
   assert.equal(lastDate({ dates: { announce: '2026-11-01' } }), '2026-12-31');
   assert.equal(lastDate({ dates: { announce: '2026-11-01', receiptEnd: '2026-11-15', winner: '2026-11-25' } }), '2026-11-25');
 });
+
+import { readFileSync } from 'node:fs';
+import { parseYouthDetail, parseDateRange } from '../sources/youth-seoul.mjs';
+test('청년안심주택 상세: 주소·일정·문의처 파싱', () => {
+  const d = parseYouthDetail(readFileSync(new URL('../fixtures/youth-view.html', import.meta.url), 'utf8'), '2026-10-15');
+  assert.equal(d.address, '서울특별시 강서구 화곡로 146');
+  assert.equal(d.complexName, '포르투나블루');
+  assert.equal(d.dates.receiptStart, '2026-10-16');
+  assert.equal(d.dates.receiptEnd, '2026-10-19');
+  assert.equal(d.dates.winner, '2026-10-20');
+  assert.equal(d.dates.contractStart, '2026-10-22');
+  assert.equal(d.dates.contractEnd, '2026-10-23');
+  assert.deepEqual(d.extraSchedule, [{ label: '서류사본제출', start: undefined, end: '2026-10-21' }]);
+  assert.equal(d.phone, '010-4942-8982');
+  assert.equal(d.totalUnits, 1);
+});
+test('날짜 범위 파싱', () => {
+  assert.deepEqual(parseDateRange("‘26. 11. 09. (월) ~ 11. 13. (금) 10:00 ~ 17:00", 2026), { start: '2026-11-09', end: '2026-11-13' });
+  assert.deepEqual(parseDateRange("~ ‘26. 11. 05. (목)", 2026), { end: '2026-11-05' });
+  assert.deepEqual(parseDateRange('2026.12.01', 2026), { start: '2026-12-01', end: undefined });
+});
+
+import { checkQuality } from './quality.mjs';
+test('정합성 점검', () => {
+  assert.deepEqual(checkQuality({ source: 'youth-seoul', dates: { announce: '2026-10-29', receiptStart: '2026-11-02' } }), ['주소 미제공', '접수 마감일 미제공', '발표일 미제공', '계약일 미제공']);
+  assert.deepEqual(checkQuality({ source: 'applyhome', category: 'APT', address: 'x', geoPrecision: 'address', models: [{}], dates: { announce: '2026-11-01', receiptStart: '2026-11-05', receiptEnd: '2026-11-04', winner: '2026-11-10', contractStart: '2026-11-20' } }), ['접수 마감이 시작보다 빠름']);
+});

@@ -39,3 +39,59 @@ export function geoCandidates(raw) {
     .map((c) => (typeof c === 'string' ? { q: c, precision: 'address' } : c))
     .filter((c) => c.q && c.q.split(' ').length >= 2 && !seen.has(c.q) && seen.add(c.q));
 }
+
+// ---------- 단지명 키워드 검색 (카카오 장소 검색) ----------
+// 분양 단지는 공사 중이어도 카카오에 "OO아파트 (2029년09월예정)" 같은 장소로 등록되는 경우가 많다.
+// "시·군·구 + 단지명"으로 찾고, 이름이 실제로 겹치는 주거시설만 채택한다(견본주택·주차장 제외).
+
+const GENERIC = /(추가|최초|재)?\s*모집\s*공고|입주자|예비입주자|모집|공고|무순위|잔여세대|임의공급|취소\s*후\s*재공급|신혼희망타운|공공분양|공공임대|국민임대|영구임대|행복주택|통합공공임대|매입임대|민간임대|공공지원|분양전환|본청약|사전청약|청약|민영|국민|\d+년|임대주택|주택|아파트|오피스텔|도시형생활주택|일반매각|단지|블록|블럭|지구|\bBL\b/g;
+
+export function cleanName(name) {
+  return String(name ?? '')
+    .replace(/\[[^\]]*\]/g, ' ')
+    .replace(/\([^)]*\)/g, ' ')
+    .replace(/\d{4}[.\-]\d{1,2}[.\-]\d{1,2}\.?/g, ' ')
+    .replace(GENERIC, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+const norm = (s) => String(s ?? '').replace(GENERIC, '').replace(/[^가-힣A-Za-z0-9]/g, '').toLowerCase();
+
+/** 공고 주소에서 시·군·구 이름(예: "과천시" → "과천", "수원시 권선구") */
+export function sigunguOf(address, region) {
+  const t = String(address ?? '').replace(/\s+/g, ' ').trim().split(' ');
+  const g = t[1] && /(시|군|구)$/.test(t[1]) ? t[1] : undefined;
+  return g ? g.replace(/(특별자치시|광역시|특별시|시|군)$/, '') : region;
+}
+
+/** 키워드 검색어: "과천 해링턴 스퀘어 과천" */
+export function nameQuery(n) {
+  const name = cleanName(n.name);
+  if (!name || name.replace(/\s/g, '').length < 3) return undefined;
+  const area = sigunguOf(n.address, n.region);
+  return area && !name.startsWith(area) ? `${area} ${name}` : name;
+}
+
+/** 장소가 공고 단지와 같은 곳인가: 주거시설 + 이름에 공통 부분(3글자 이상) + 같은 시·도 */
+export function placeMatches(n, doc) {
+  const cat = doc.category_name ?? '';
+  if (/모델하우스|견본주택|주차장|충전소|부동산중개|공인중개/.test(`${cat} ${doc.place_name}`)) return false;
+  if (!/주거시설|아파트|오피스텔|주택/.test(cat)) return false;
+  const sido = { 서울: '서울', 경기: '경기', 인천: '인천', 부산: '부산', 대구: '대구', 광주: '광주', 대전: '대전', 울산: '울산', 세종: '세종', 강원: '강원', 충북: '충북', 충남: '충남', 전북: '전북', 전남: '전남', 경북: '경북', 경남: '경남', 제주: '제주' }[n.region];
+  if (sido && !String(doc.address_name ?? '').startsWith(sido)) return false;
+  const a = norm(cleanName(n.name));
+  const b = norm(doc.place_name);
+  if (a.length < 3 || b.length < 3) return false;
+  for (let i = 0; i + 3 <= a.length; i++) if (b.includes(a.slice(i, i + 3))) return longestCommon(a, b) >= Math.min(4, a.length);
+  return false;
+}
+
+function longestCommon(a, b) {
+  let best = 0;
+  for (let i = 0; i < a.length; i++) for (let j = i + best + 1; j <= a.length; j++) {
+    if (b.includes(a.slice(i, j))) best = j - i;
+    else break;
+  }
+  return best;
+}

@@ -14,6 +14,7 @@ import { Agenda } from './components/Agenda.tsx';
 import { AdSlot } from './components/AdSlot.tsx';
 import { applyOverrides } from './lib/overrides.ts';
 import { UI } from './config/ui.ts';
+import { AccountButton, useAccount } from './components/Account.tsx';
 import { downloadIcs } from './components/NoticeDetail.tsx';
 
 type Tab = 'map' | 'list' | 'saved' | 'agenda' | 'me';
@@ -45,6 +46,17 @@ export default function App() {
   const [persisted, setPersisted] = useState(initial.persisted);
   const [touched, setTouched] = useState(initial.persisted);
   const [saved, setSaved] = useState<string[]>(loadSaved);
+  // 계정 저장 (Supabase 설정 시에만 활성): 로그인하면 서버 값과 합치고 이후 자동 저장
+  const acc = useAccount({
+    profile,
+    touched,
+    saved,
+    apply: (x) => {
+      setProfile(x.profile);
+      setSaved(x.saved);
+      setTouched(x.touched);
+    },
+  });
 
   const [q, setQ] = useState('');
   const [cat, setCat] = useState<Category | ''>('');
@@ -212,6 +224,7 @@ export default function App() {
             <p className="muted small">전국 청약 공고 지도 · 내 조건 맞춤 매칭</p>
           </div>
         </div>
+        <AccountButton acc={acc} />
         {data?.sample && <div className="banner">샘플 데이터 표시 중 (실제 공고 아님)</div>}
       </header>
 
@@ -250,7 +263,7 @@ export default function App() {
 
       <main className={`body tab-${tab} ${sideOpen ? 'side-open' : 'side-closed'}${UI.fadeBottom ? ' fade' : ''}`}>
         <section className="pane-map">
-          <KakaoMap notices={filtered} verdicts={verdicts} pastIds={pastIds} selectedId={selectedId} onSelect={select} onBoundsChange={setBounds} />
+          <KakaoMap notices={filtered} verdicts={verdicts} pastIds={pastIds} hasProfile={touched} selectedId={selectedId} onSelect={select} onBoundsChange={setBounds} />
         </section>
 
         <section className="pane-side" ref={sideRef}>

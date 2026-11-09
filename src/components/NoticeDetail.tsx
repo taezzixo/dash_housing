@@ -28,6 +28,7 @@ function useChecked(id: string) {
   useEffect(() => {
     try {
       localStorage.setItem(key, JSON.stringify(done));
+      window.dispatchEvent(new Event('dash:checklist')); // 계정 자동 저장 신호
     } catch {
       /* ignore */
     }
@@ -84,7 +85,11 @@ export function NoticeDetail({ notice: n, profile, hasProfile, today, saved, onT
             {n.removedAt && <span className="tag danger">취소·삭제 의심</span>}
           </div>
           <h2>{n.name}</h2>
-          <p className="muted">{n.address ?? n.region}{n.totalUnits ? ` · ${n.totalUnits.toLocaleString()}세대` : ''}</p>
+          <p className="muted">
+            {n.address ?? `${n.region ?? ''} (상세 주소 미제공)`}
+            {n.addressNote ? ` (${n.addressNote})` : ''}
+            {n.totalUnits ? ` · ${n.totalUnits.toLocaleString()}세대` : ''}
+          </p>
         </div>
       </div>
 
@@ -94,6 +99,12 @@ export function NoticeDetail({ notice: n, profile, hasProfile, today, saved, onT
         {n.url && <a className="btn" href={n.url} target="_blank" rel="noreferrer">공고 원문 ↗</a>}
       </div>
 
+      {!!n.issues?.length && (
+        <div className="alert soft">
+          <b>공고 원문 확인 필요</b> — 자동 수집 정보에 빠진 항목이 있습니다: {n.issues.join(', ')}
+          {n.url && <> · <a href={n.url} target="_blank" rel="noreferrer">원문 보기</a></>}
+        </div>
+      )}
       {n.removedAt && (
         <p className="alert">{n.removedAt}에 공고 출처 목록에서 사라졌습니다. 취소·철회되었을 수 있으니 공고 원문을 확인하세요.</p>
       )}
@@ -253,6 +264,8 @@ export function NoticeDetail({ notice: n, profile, hasProfile, today, saved, onT
         {n.builder && <div>시공: {n.builder}</div>}
         {n.developer && <div>시행: {n.developer}</div>}
         {n.phone && <div>문의: <a href={`tel:${n.phone}`}>{n.phone}</a></div>}
+        {n.homepage && <div>홈페이지·청약 신청: <a href={n.homepage} target="_blank" rel="noreferrer">{n.homepage.replace(/^https?:\/\//, '').slice(0, 40)}</a></div>}
+        {n.placeName && <div>지도 위치: 카카오맵 「{n.placeName}」 기준</div>}
         {n.moveIn && <div>입주예정: {n.moveIn.slice(0, 4)}.{n.moveIn.slice(4, 6)}</div>}
         {n.geoPrecision === 'region' && <div>※ 지도 위치는 시·도 중심 근사값입니다 (정확한 주소 미제공).</div>}
         {n.geoPrecision === 'district' && <div>※ 지도 위치는 시·군·구 또는 동 단위 근사값입니다.</div>}

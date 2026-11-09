@@ -5,9 +5,10 @@
 
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import { geoCandidates } from './lib/geo.mjs';
+import { geoCandidates, nameQuery, placeMatches } from './lib/geo.mjs';
 import { splitArchive, trackChanges } from './lib/track.mjs';
-import { fetchYouthSeoul } from './sources/youth-seoul.mjs';
+import { annotateQuality } from './lib/quality.mjs';
+import { enrichYouthDetails, fetchYouthSeoul } from './sources/youth-seoul.mjs';
 import { fetchCompetition, needsCompetition } from './lib/competition.mjs';
 
 const KEY = process.env.DATA_GO_KR_KEY;
@@ -142,11 +143,26 @@ function normModel(m) {
   };
 }
 
+// 출처가 오류 없이 0건을 돌려주는 경우가 있다 (예: 청약홈 API 자정 무렵 데이터 갱신 중).
+// 직전 수집에서 5건 이상 있던 유형이 갑자기 0건이면 일시 장애로 보고 이번 수집 전체를 실패 처리 → 직전 데이터 유지
+const prevCount = {};
+try {
+  const old = JSON.parse(await readFile(OUT, 'utf8'));
+  if (!old.sample) for (const n of old.notices ?? []) prevCount[`${n.source}:${n.category}`] = (prevCount[`${n.source}:${n.category}`] ?? 0) + 1;
+} catch {
+  /* 첫 수집 */
+}
+function assertNotEmpty(source, category, count) {
+  const before = prevCount[`${source}:${category}`] ?? 0;
+  if (count === 0 && before >= 5) throw new Error(`${source} ${category}: 0건 (직전 ${before}건) — 출처 일시 장애로 판단, 직전 데이터 유지`);
+}
+
 async function fetchApplyhome() {
   const out = [];
   for (const api of APPLYHOME) {
     const from = api.compactDate ? ymd(since).replaceAll('-', '') : ymd(since);
     const rows = await odcAll(api.detail, { 'cond[RCRIT_PBLANC_DE::GTE]': from });
+    assertNotEmpty('applyhome', api.cat, rows.length);
     let kept = 0;
     for (const r of rows) {
       const n = normApplyhome(api.cat, r);
@@ -202,6 +218,7 @@ async function fetchLH() {
     const all = Number(list[0]?.ALL_CNT ?? 0);
     if (!list.length || seen >= all) break;
   }
+  assertNotEmpty('lh', 'LH', out.length);
   console.log(`LH: ${out.length}건`);
   return out;
 }
@@ -231,26 +248,64 @@ const REGION_CENTER = {
 };
 
 // ---------- 카카오 지오코딩 (캐시) ----------
+// 위치 찾기 순서 (정확한 것부터)
+//  1) 주소 검색: 괄호 안 지번 → 정리한 주소. 도로명·지번까지 일치(ROAD_ADDR/REGION_ADDR)하면 정확
+//  2) 단지명 키워드 검색: "시·군·구 + 단지명" → 이름이 겹치는 주거시설만 채택 (공사 중 단지도 "(2029년예정)"으로 등록됨)
+//  3) 근사: 동·리 단위 주소, 시·군·구, 역 이름(청년안심주택)
+//  4) 시·도 중심
 async function geocode(notices) {
   const cache = existsSync(GEO_CACHE) ? JSON.parse(await readFile(GEO_CACHE, 'utf8')) : {};
   let calls = 0;
-  const stat = { address: 0, district: 0, region: 0, none: 0 };
+  const stat = { address: 0, keyword: 0, district: 0, region: 0, none: 0 };
+  const cached = async (key, fn) => {
+    if (!(key in cache) && KAKAO) {
+      const v = await fn();
+      if (v !== undefined) cache[key] = v; // 네트워크 오류는 저장하지 않음
+      calls++;
+      await sleep(60);
+    }
+    return cache[key];
+  };
+
   for (const n of notices) {
     let hit = null;
-    const cands = n.address ? geoCandidates(n.address) : n.geoKeyword ? [{ q: n.geoKeyword, precision: 'district' }] : [];
-    for (const c of cands) {
-      if (!(c.q in cache) && KAKAO) {
-        cache[c.q] = await kakaoLookup(c.q);
-        calls++;
-        await sleep(60);
+    let approx = null;
+    // 1) 주소
+    for (const c of geoCandidates(n.address)) {
+      if (c.precision === 'district') {
+        approx ??= { key: `a:${c.q}`, precision: 'district' };
+        continue;
       }
-      const r = cache[c.q];
-      if (r) {
-        // 카카오가 동/리 단위(REGION)로만 찾았으면 근사 위치
-        hit = { lat: r[0], lng: r[1], precision: c.precision === 'district' || r[2] === 'REGION' ? 'district' : 'address' };
+      const r = await cached(`a:${c.q}`, () => kakaoAddress(c.q));
+      if (!r) continue;
+      if (r[2] === 'REGION') approx ??= { lat: r[0], lng: r[1], precision: 'district' };
+      else {
+        hit = { lat: r[0], lng: r[1], precision: 'address', via: 'address' };
         break;
       }
     }
+    // 2) 단지명
+    if (!hit) {
+      const q = nameQuery(n);
+      if (q) {
+        const docs = (await cached(`k:${q}`, () => kakaoKeyword(q))) ?? [];
+        const d = docs.find((doc) => placeMatches(n, doc));
+        if (d) hit = { lat: Number(d.y), lng: Number(d.x), precision: 'address', via: 'keyword', place: d.place_name };
+      }
+    }
+    // 3) 근사
+    if (!hit && approx) {
+      if (approx.lat) hit = approx;
+      else {
+        const r = await cached(approx.key, () => kakaoAddress(approx.key.slice(2)));
+        if (r) hit = { lat: r[0], lng: r[1], precision: 'district' };
+      }
+    }
+    if (!hit && n.geoKeyword) {
+      const docs = (await cached(`k:${n.geoKeyword}`, () => kakaoKeyword(n.geoKeyword))) ?? [];
+      if (docs[0]) hit = { lat: Number(docs[0].y), lng: Number(docs[0].x), precision: 'district' };
+    }
+    // 4) 시·도 중심
     if (!hit) {
       const c = REGION_CENTER[n.region];
       if (c) {
@@ -264,27 +319,36 @@ async function geocode(notices) {
       n.lat = hit.lat;
       n.lng = hit.lng;
       n.geoPrecision = hit.precision;
-      stat[hit.precision]++;
+      if (hit.place) n.placeName = hit.place; // 카카오 지도 장소명 (상세에 표시)
+      else delete n.placeName;
+      stat[hit.via === 'keyword' ? 'keyword' : hit.precision]++;
     } else stat.none++;
   }
+  // 예전 형식 캐시 키 정리
+  for (const k of Object.keys(cache)) if (!/^[ak]:/.test(k)) delete cache[k];
   await mkdir('data', { recursive: true });
   await writeFile(GEO_CACHE, JSON.stringify(cache));
   console.log(`지오코딩: 신규 조회 ${calls}건, 결과 ${JSON.stringify(stat)}${KAKAO ? '' : ' (KAKAO_REST_KEY 없음)'}`);
 }
 
-async function kakaoLookup(q) {
-  const h = { Authorization: `KakaoAK ${KAKAO}` };
+async function kakaoAddress(q) {
   try {
-    let r = await fetch(`https://dapi.kakao.com/v2/local/search/address.json?query=${encodeURIComponent(q)}&size=1`, { headers: h });
-    let j = await r.json();
-    let doc = j.documents?.[0];
-    if (doc) return [Number(doc.y), Number(doc.x), doc.address_type];
-    r = await fetch(`https://dapi.kakao.com/v2/local/search/keyword.json?query=${encodeURIComponent(q)}&size=1`, { headers: h });
-    j = await r.json();
-    doc = j.documents?.[0];
-    return doc ? [Number(doc.y), Number(doc.x), 'KEYWORD'] : null;
+    const r = await fetch(`https://dapi.kakao.com/v2/local/search/address.json?query=${encodeURIComponent(q)}&size=1`, { headers: { Authorization: `KakaoAK ${KAKAO}` } });
+    if (!r.ok) return undefined;
+    const doc = (await r.json()).documents?.[0];
+    return doc ? [Number(doc.y), Number(doc.x), doc.address_type] : null;
   } catch {
-    return undefined; // 네트워크 오류는 캐시하지 않음
+    return undefined;
+  }
+}
+
+async function kakaoKeyword(q) {
+  try {
+    const r = await fetch(`https://dapi.kakao.com/v2/local/search/keyword.json?query=${encodeURIComponent(q)}&size=5`, { headers: { Authorization: `KakaoAK ${KAKAO}` } });
+    if (!r.ok) return undefined;
+    return ((await r.json()).documents ?? []).map((d) => ({ place_name: d.place_name, address_name: d.address_name, category_name: d.category_name, x: d.x, y: d.y }));
+  } catch {
+    return undefined;
   }
 }
 
@@ -314,6 +378,7 @@ await collect('applyhome', '청약홈(한국부동산원) 분양정보 조회 �
 await collect('lh', 'LH 분양임대공고문 조회 서비스', fetchLH);
 await collect('youth-seoul', '서울주거포털 청년안심주택 모집공고', async () => {
   const ys = await fetchYouthSeoul(ymd(since));
+  assertNotEmpty('youth-seoul', 'YOUTH', ys.length);
   console.log(`서울 청년안심주택: ${ys.length}건`);
   return ys;
 });
@@ -337,9 +402,8 @@ if (!notices.length) {
 }
 // 중복 제거
 notices = [...new Map(notices.map((n) => [n.id, n])).values()];
-await geocode(notices);
 
-// 정정·취소 추적: 직전 데이터와 비교 (샘플 데이터는 비교하지 않음)
+// 직전 데이터 (정정 추적·상세 재사용용, 샘플 데이터는 제외)
 let prev = [];
 if (existsSync(OUT)) {
   try {
@@ -349,6 +413,19 @@ if (existsSync(OUT)) {
     /* 첫 수집 */
   }
 }
+let archivedPrev = [];
+try {
+  archivedPrev = JSON.parse(await readFile(ARCHIVE, 'utf8')).notices ?? [];
+} catch {
+  /* 없음 */
+}
+
+// 청년안심주택: 상세 페이지에서 주소·전체 일정·문의처 보강 (새 공고만 요청)
+const ysFetched = await enrichYouthDetails(notices, new Map([...archivedPrev, ...prev].map((n) => [n.id, n])));
+console.log(`청년안심주택 상세 보강: 신규 ${ysFetched}건`);
+
+await geocode(notices);
+
 
 let prevArchive = [];
 try {
@@ -388,6 +465,8 @@ const changed = notices.filter((n) => n.changes?.some((c) => c.at === ymd(today)
 const removed = notices.filter((n) => n.removedAt === ymd(today)).length;
 console.log(`변경 감지: 일정 변경 ${changed}건, 사라진 공고 ${removed}건`);
 notices.sort((a, b) => (b.dates.announce ?? '').localeCompare(a.dates.announce ?? ''));
+const quality = annotateQuality(notices);
+console.log(`정합성 점검: ${JSON.stringify(quality)}`);
 
 // 끝난 공고는 보관 파일(1년)로 이동 — 첫 화면은 가볍게, 지난 공고·경쟁률은 필요할 때 불러온다
 const { current, archive } = splitArchive(notices, prevArchive, ymd(today));
@@ -399,5 +478,5 @@ await writeFile(OUT, JSON.stringify({ generatedAt, sample: false, sources, notic
 await writeFile(ARCHIVE, JSON.stringify({ generatedAt, notices: archive }));
 const geo = {};
 for (const n of notices) geo[n.geoPrecision ?? 'none'] = (geo[n.geoPrecision ?? 'none'] ?? 0) + 1;
-await writeRunLog({ ok: runSources.every((x) => x.ok), total: notices.length, archived: archive.length, changedToday: changed, removedToday: removed, geo });
+await writeRunLog({ ok: runSources.every((x) => x.ok), total: notices.length, archived: archive.length, quality, changedToday: changed, removedToday: removed, geo });
 console.log(`저장: ${OUT} (${notices.length}건)`);

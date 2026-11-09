@@ -87,6 +87,12 @@ export interface Notice {
   competition?: Competition[]; // 1순위 경쟁률 (접수 마감 APT)
   scores?: ScoreStat[]; // 당첨가점
   manual?: boolean; // 관리자 수동 등록
+  extraSchedule?: { label: string; start?: string; end?: string }[]; // 서류 제출 등 기타 일정 (공고 본문에서 추출)
+  issues?: string[]; // 정합성 점검 결과 (빠진 정보·순서 이상)
+  placeName?: string; // 지도 위치로 쓴 카카오 장소명
+  addressNote?: string; // 주소 보조 설명 (예: 5호선 화곡역 6번 출구)
+  complexName?: string;
+  detailParsed?: boolean;
   note?: string; // 관리자 메모
 }
 
@@ -170,6 +176,7 @@ export interface Run {
   ok: boolean;
   total: number;
   archived?: number;
+  quality?: Record<string, number>;
   changedToday?: number;
   removedToday?: number;
   geo?: Record<string, number>;
