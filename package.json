@@ -6,7 +6,7 @@
   "description": "대한민국 청약 지도 및 개인 맞춤형 청약 매칭",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "build": "tsc --noEmit && vite build && node scripts/prerender.mjs",
     "preview": "vite preview",
     "fetch:data": "node scripts/fetch-notices.mjs",
     "test": "node --experimental-strip-types --test src/lib/*.test.ts scripts/lib/*.test.mjs"

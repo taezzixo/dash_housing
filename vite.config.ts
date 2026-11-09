@@ -5,4 +5,9 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   plugins: [react()],
   base: process.env.BASE_PATH ?? '/',
+  build: {
+    rollupOptions: {
+      input: { main: 'index.html', admin: 'admin.html' }, // 관리자페이지는 /admin.html
+    },
+  },
 });

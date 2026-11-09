@@ -1,6 +1,6 @@
 name: 공고 수집
 
-# 배포는 Cloudflare Pages가 main 브랜치 푸시를 감지해 자동으로 빌드한다.
+# 배포는 Cloudflare Workers(정적 자산) 프로젝트가 main 푸시를 감지해 빌드·배포한다 (wrangler.jsonc).
 # 이 워크플로는 (1) 매일 공고를 수집해 data 파일을 커밋하고 (2) 푸시·PR마다 테스트·빌드를 검사한다.
 
 on:
@@ -49,11 +49,11 @@ jobs:
         if: ${{ env.DATA_GO_KR_KEY != '' }}
         run: npm run fetch:data
       - run: npm test
-      - name: 수집 데이터 커밋 (Cloudflare Pages가 자동 배포)
+      - name: 수집 데이터 커밋 (Cloudflare가 자동 배포)
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add public/data/notices.json data/geocache.json
+          git add -A public/data data/geocache.json
           git diff --cached --quiet && echo "변경 없음" && exit 0
           git commit -m "data: 공고 갱신 $(TZ=Asia/Seoul date +%F)"
           git push

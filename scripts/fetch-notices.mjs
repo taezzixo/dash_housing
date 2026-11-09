@@ -8,6 +8,7 @@ import { existsSync } from 'node:fs';
 import { geoCandidates } from './lib/geo.mjs';
 import { trackChanges } from './lib/track.mjs';
 import { fetchYouthSeoul } from './sources/youth-seoul.mjs';
+import { fetchCompetition, needsCompetition } from './lib/competition.mjs';
 
 const KEY = process.env.DATA_GO_KR_KEY;
 const KAKAO = process.env.KAKAO_REST_KEY;
@@ -54,10 +55,11 @@ const APPLYHOME = [
 
 async function odcAll(op, conds = {}) {
   const rows = [];
+  const base = op.startsWith('https://') ? op : `${ODC}/${op}`;
   for (let page = 1; page < 50; page++) {
     const q = new URLSearchParams({ page: String(page), perPage: '100', returnType: 'JSON' });
     for (const [k, v] of Object.entries(conds)) q.set(k, v);
-    const j = await getJson(`${ODC}/${op}?${q}&serviceKey=${serviceKey}`);
+    const j = await getJson(`${base}?${q}&serviceKey=${serviceKey}`);
     rows.push(...(j.data ?? []));
     if (!j.data?.length || rows.length >= (j.matchCount ?? j.totalCount ?? 0)) break;
   }
@@ -286,34 +288,50 @@ async function kakaoLookup(q) {
 }
 
 // ---------- main ----------
+const RUN_LOG = 'public/data/run-log.json';
+const started = Date.now();
+const runSources = []; // 관리자페이지용 수집 기록
 const sources = [];
 const okSources = new Set();
 let notices = [];
-try {
-  notices.push(...(await fetchApplyhome()));
-  sources.push('청약홈(한국부동산원) 분양정보 조회 서비스');
-  okSources.add('applyhome');
-} catch (e) {
-  console.error('청약홈 수집 실패:', e.message);
+
+async function collect(id, label, fn) {
+  const t0 = Date.now();
+  try {
+    const list = await fn();
+    notices.push(...list);
+    sources.push(label);
+    okSources.add(id);
+    runSources.push({ id, label, ok: true, count: list.length, ms: Date.now() - t0 });
+  } catch (e) {
+    console.error(`${label} 수집 실패:`, e.message);
+    runSources.push({ id, label, ok: false, count: 0, error: String(e.message).slice(0, 300), ms: Date.now() - t0 });
+  }
 }
-try {
-  notices.push(...(await fetchLH()));
-  sources.push('LH 분양임대공고문 조회 서비스');
-  okSources.add('lh');
-} catch (e) {
-  console.error('LH 수집 실패:', e.message);
-}
-try {
+
+await collect('applyhome', '청약홈(한국부동산원) 분양정보 조회 서비스', fetchApplyhome);
+await collect('lh', 'LH 분양임대공고문 조회 서비스', fetchLH);
+await collect('youth-seoul', '서울주거포털 청년안심주택 모집공고', async () => {
   const ys = await fetchYouthSeoul(ymd(since));
   console.log(`서울 청년안심주택: ${ys.length}건`);
-  notices.push(...ys);
-  sources.push('서울주거포털 청년안심주택 모집공고');
-  okSources.add('youth-seoul');
-} catch (e) {
-  console.error('청년안심주택 수집 실패:', e.message);
+  return ys;
+});
+
+async function writeRunLog(extra) {
+  let history = [];
+  try {
+    history = JSON.parse(await readFile(RUN_LOG, 'utf8')).history ?? [];
+  } catch {
+    /* 첫 실행 */
+  }
+  const run = { runAt: new Date().toISOString(), durationSec: Math.round((Date.now() - started) / 1000), sources: runSources, ...extra };
+  await mkdir('public/data', { recursive: true });
+  await writeFile(RUN_LOG, JSON.stringify({ last: run, history: [run, ...history].slice(0, 30) }));
 }
+
 if (!notices.length) {
   console.error('수집된 공고가 없습니다. 기존 데이터를 유지합니다.');
+  await writeRunLog({ ok: false, total: 0 });
   process.exit(1);
 }
 // 중복 제거
@@ -330,6 +348,33 @@ if (existsSync(OUT)) {
     /* 첫 수집 */
   }
 }
+
+// 경쟁률·당첨가점: 접수가 끝난 APT만. 이미 받은 결과는 재사용
+const prevById = new Map(prev.map((n) => [n.id, n]));
+let cmpCalls = 0;
+let cmpOk = true;
+for (const n of notices) {
+  if (!needsCompetition(n, ymd(today))) continue;
+  const o = prevById.get(n.id);
+  if (o?.competition?.length) {
+    n.competition = o.competition;
+    n.scores = o.scores;
+    continue;
+  }
+  try {
+    const r = await fetchCompetition(n, odcAll);
+    if (r.competition.length) n.competition = r.competition;
+    if (r.scores.length) n.scores = r.scores;
+    cmpCalls++;
+    await sleep(80);
+  } catch (e) {
+    cmpOk = false;
+    console.warn(`경쟁률 조회 실패 ${n.name}: ${e.message}`);
+  }
+}
+console.log(`경쟁률: 신규 조회 ${cmpCalls}건`);
+runSources.push({ id: 'competition', label: '청약홈 경쟁률·당첨가점', ok: cmpOk, count: notices.filter((n) => n.competition).length });
+
 notices = trackChanges(prev, notices, ymd(today), okSources);
 const changed = notices.filter((n) => n.changes?.some((c) => c.at === ymd(today))).length;
 const removed = notices.filter((n) => n.removedAt === ymd(today)).length;
@@ -337,4 +382,7 @@ console.log(`변경 감지: 일정 변경 ${changed}건, 사라진 공고 ${remo
 notices.sort((a, b) => (b.dates.announce ?? '').localeCompare(a.dates.announce ?? ''));
 await mkdir('public/data', { recursive: true });
 await writeFile(OUT, JSON.stringify({ generatedAt: new Date().toISOString(), sample: false, sources, notices }));
+const geo = {};
+for (const n of notices) geo[n.geoPrecision ?? 'none'] = (geo[n.geoPrecision ?? 'none'] ?? 0) + 1;
+await writeRunLog({ ok: runSources.every((x) => x.ok), total: notices.length, changedToday: changed, removedToday: removed, geo });
 console.log(`저장: ${OUT} (${notices.length}건)`);

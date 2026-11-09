@@ -1,0 +1,6 @@
+{
+  "_help": "관리자 수동 보정 파일. hide: 숨길 공고 id 목록 / patch: 공고 id별 수정값(lat, lng, geoPrecision, address, name, url, note) / manual: 수동 등록 공고. 작성법은 docs/ADMIN.md 참고. 저장(커밋)하면 1~2분 뒤 사이트에 반영된다.",
+  "hide": [],
+  "patch": {},
+  "manual": []
+}

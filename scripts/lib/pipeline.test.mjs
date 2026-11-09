@@ -49,3 +49,13 @@ test('청년안심주택 정규화·역 이름 검색어', () => {
   assert.equal(n.geoKeyword, '서울 화랑대역');
   assert.equal(stationQuery('[민간임대] 숭곡초교역(예정) 성북펠릭스 추가모집공고'), '서울 숭곡초교역');
 });
+
+import { noticePage, applyOverrides as ovNode } from '../prerender.mjs';
+test('SEO 페이지: 제목·일정·딥링크·HTML 이스케이프', () => {
+  const html = noticePage({ id: 'ah-1-1', category: 'APT', subType: '민영', name: 'A<B> 아파트', address: '서울 서초구', dates: { announce: '2026-11-01', specialStart: '2026-11-10', specialEnd: '2026-11-11' } }, { site: 'https://x.kr', generatedAt: '2026-11-09T00:00:00Z' });
+  assert.match(html, /<title>A&lt;B&gt; 아파트 청약 일정·자격 \| 청약맵<\/title>/);
+  assert.match(html, /특별공급 접수<\/th><td>2026-11-10 ~ 2026-11-11/);
+  assert.match(html, /href="\/\?id=ah-1-1"/);
+  assert.match(html, /rel="canonical" href="https:\/\/x.kr\/n\/ah-1-1"/);
+  assert.equal(ovNode([{ id: 'a', name: 'a', dates: {} }], { hide: ['a'] }).length, 0);
+});

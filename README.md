@@ -20,23 +20,21 @@ GitHub Actions (매일 06:17 KST)
       ─▶ public/data/notices.json 커밋
                       │ (main 푸시)
                       ▼
-Cloudflare Pages 자동 빌드·배포 (무료, 상업 이용 가능)
+Cloudflare Workers 정적 자산 자동 빌드·배포 (무료, 상업 이용 가능)
+  + 공고별 SEO 페이지(/n/<id>) · sitemap.xml · 관리자페이지(/admin.html)
                       │
 브라우저: 카카오맵 · 자격판정(기준 버전 관리) · 서류 안내 · .ics  ← 모두 클라이언트
 ```
 
 ## 설정
 1. **GitHub Secrets** (완료): `DATA_GO_KR_KEY`, `KAKAO_REST_KEY`, `KAKAO_JS_KEY`
-2. **Cloudflare Pages 연결**
-   - Cloudflare 대시보드 → Workers & Pages → Create → Pages → **Connect to Git**에서 `taezzixo/dash_housing`를 고릅니다.
-   - Framework preset: `None`
-   - Build command: `npm run build`
-   - Build output directory: `dist`
-   - 환경 변수(Production)는 두 개를 넣습니다.
+2. **Cloudflare 배포 (Workers 정적 자산)**: 대시보드 → Workers 및 Pages → `dash-housing` 프로젝트가 저장소에 연결돼 있습니다.
+   - 빌드 명령은 `npm run build`, 배포 명령은 `npx wrangler deploy`입니다. 배포 설정은 `wrangler.jsonc`에 있습니다.
+   - 설정 → 빌드 → **빌드 변수 및 비밀**에 두 가지를 넣습니다.
      - `VITE_KAKAO_JS_KEY` = 카카오 JavaScript 키
-     - `NODE_VERSION` = `22`
+     - `SITE_URL` = 사이트 주소. 예: `https://dash-housing.xxx.workers.dev`
 3. **카카오 도메인 등록**: 카카오 개발자센터 → 앱 → 플랫폼 → Web에 배포 주소를 등록합니다.
-   - 기본 주소: `https://<프로젝트>.pages.dev`
+   - 기본 주소: `https://dash-housing.<계정>.workers.dev`. Cloudflare 프로젝트 → 설정 → 도메인 및 경로에서 확인할 수 있습니다.
    - 도메인을 구매하면 그 주소도 추가합니다.
 4. **첫 수집**: GitHub → Actions → "공고 수집" → Run workflow를 누릅니다. 이후에는 매일 자동으로 실행됩니다.
 
@@ -53,3 +51,6 @@ npm run dev
 - 프록시 환경에서 수집할 때는 `NODE_USE_ENV_PROXY=1`을 지정하세요.
 - 실제 데이터로 개발하려면 `DATA_GO_KR_KEY=... npm run fetch:data`를 실행하세요.
 - 테스트는 `npm test`로 실행합니다. 자격판정 규칙을 검사합니다.
+
+## 관리자
+[docs/ADMIN.md](docs/ADMIN.md)를 참고하세요. 관리자페이지(`/admin.html`), 수동 보정(`public/data/overrides.json`), Cloudflare Access 설정을 다룹니다.

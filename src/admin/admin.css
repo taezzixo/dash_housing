@@ -1,0 +1,26 @@
+.admin { max-width: 1100px; margin: 0 auto; padding: 16px; height: auto; }
+body:has(.admin) { overflow: auto; }
+.admin header h1 { margin: 0; font-size: 20px; }
+.admin .row { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0; }
+.admin-tabs { display: flex; gap: 4px; overflow-x: auto; border-bottom: 1px solid var(--line); margin: 8px 0 12px; }
+.admin-tabs button { border: none; background: none; padding: 8px 12px; cursor: pointer; color: var(--muted); white-space: nowrap; border-bottom: 2px solid transparent; }
+.admin-tabs button.on { color: var(--brand); border-color: var(--brand); font-weight: 700; }
+.admin h3 { font-size: 15px; margin: 20px 0 8px; }
+.admin .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px; }
+.admin .card { display: flex; flex-direction: column; gap: 4px; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); text-align: left; cursor: default; font: inherit; color: inherit; }
+.admin button.card { cursor: pointer; }
+.admin .card.sel { border-color: var(--brand); box-shadow: 0 0 0 2px var(--brand-soft); }
+.admin .card.bad { border-color: #dc2626; }
+.admin .big { font-size: 22px; font-weight: 700; }
+.admin .err { font-size: 11px; color: #dc2626; white-space: pre-wrap; word-break: break-all; }
+.admin .status { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: var(--radius); margin-bottom: 8px; font-size: 14px; }
+.admin .status.ok { background: var(--ok-soft); color: var(--ok); }
+.admin .status.bad { background: #fee2e2; color: #b91c1c; }
+.admin .alist { list-style: none; padding: 0; margin: 0; }
+.admin .alist li { display: flex; justify-content: space-between; gap: 8px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.admin .alist a { color: var(--text); font-weight: 600; text-decoration: none; }
+.admin .form { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
+.admin .form label { display: flex; flex-direction: column; gap: 3px; font-size: 13px; color: var(--muted); }
+.admin .form input, .admin .form select { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
+.admin .snippet { background: var(--no-soft); padding: 10px; border-radius: 8px; font-size: 12px; overflow-x: auto; }
+.admin code { font-size: 11px; }

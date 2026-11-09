@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { Category, Notice, NoticeFile, Profile, Verdict } from './types.ts';
+import type { Category, Notice, NoticeFile, Overrides, Profile, Verdict } from './types.ts';
 import { CATEGORY_LABEL } from './types.ts';
 import { bestVerdict, evaluate, matchScore } from './lib/eligibility.ts';
 import { clearProfile, loadProfile, REGIONS, saveProfile } from './lib/profile.ts';
@@ -11,6 +11,7 @@ import { NoticeDetail } from './components/NoticeDetail.tsx';
 import { ProfileForm } from './components/ProfileForm.tsx';
 import { Agenda } from './components/Agenda.tsx';
 import { AdSlot } from './components/AdSlot.tsx';
+import { applyOverrides } from './lib/overrides.ts';
 
 type Tab = 'map' | 'list' | 'agenda' | 'me';
 type StatusFilter = '' | 'active' | ReceiptStatus;
@@ -30,7 +31,8 @@ export default function App() {
   const [data, setData] = useState<NoticeFile | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>('map');
-  const [selectedId, setSelectedId] = useState<string>();
+  // 공유·검색 유입용 딥링크: /?id=공고ID
+  const [selectedId, setSelectedId] = useState<string | undefined>(() => new URLSearchParams(location.search).get('id') ?? undefined);
   const initial = useMemo(loadProfile, []);
   const [profile, setProfile] = useState<Profile>(initial.profile);
   const [persisted, setPersisted] = useState(initial.persisted);
@@ -50,11 +52,22 @@ export default function App() {
   const today = todayKST();
 
   useEffect(() => {
-    fetch(`${import.meta.env.BASE_URL}data/notices.json`, { cache: 'no-cache' })
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then(setData)
+    const base = import.meta.env.BASE_URL;
+    Promise.all([
+      fetch(`${base}data/notices.json`, { cache: 'no-cache' }).then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))),
+      fetch(`${base}data/overrides.json`, { cache: 'no-cache' }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+    ])
+      .then(([file, ov]: [NoticeFile, Overrides | null]) => setData({ ...file, notices: applyOverrides(file.notices, ov) }))
       .catch((e) => setLoadError(String(e.message ?? e)));
   }, []);
+
+  // 선택한 공고를 주소창에 반영 (공유 가능한 링크)
+  useEffect(() => {
+    const u = new URL(location.href);
+    if (selectedId) u.searchParams.set('id', selectedId);
+    else u.searchParams.delete('id');
+    history.replaceState(null, '', u);
+  }, [selectedId]);
 
   useEffect(() => {
     if (persisted) saveProfile(profile);
@@ -276,6 +289,7 @@ function NoticeCard({ n, today, verdict, saved, active, onClick, ad }: {
           <span className="tag">{CATEGORY_LABEL[n.category]}</span>
           {n.subType && <span className="tag soft">{n.subType}</span>}
           <span className={`tag st-${st}`}>{RECEIPT_LABEL[st]}</span>
+          {n.manual && <span className="tag soft">수동 등록</span>}
           {n.removedAt && <span className="tag danger">취소·삭제 의심</span>}
           {!n.removedAt && recentlyChanged(n, today) && <span className="tag warn">일정 변경</span>}
           {!n.removedAt && !recentlyChanged(n, today) && n.corrected && <span className="tag warn">정정</span>}

@@ -34,6 +34,12 @@ function useChecked(id: string) {
   return [done, setDone] as const;
 }
 
+function fmtRate(x?: { req: number; rate?: number }) {
+  if (!x) return '-';
+  if (x.rate === undefined) return `${x.req}건`;
+  return x.rate < 0 ? `미달 (${x.req}건)` : `${x.rate.toFixed(2)} : 1`;
+}
+
 export function downloadIcs(notices: Notice[]) {
   const blob = new Blob([buildIcs(notices, location.href)], { type: 'text/calendar;charset=utf-8' });
   const a = document.createElement('a');
@@ -136,6 +142,43 @@ export function NoticeDetail({ notice: n, profile, hasProfile, today, saved, onT
         <p className="disclaimer">판정은 공개 기준에 따른 참고용 안내입니다. 최종 자격은 반드시 입주자모집공고문과 청약홈에서 확인하세요.</p>
       </section>
 
+      {!!n.competition?.length && (
+        <section>
+          <h3>1순위 경쟁률 <small className="muted">(청약홈 집계)</small></h3>
+          <div className="table-wrap">
+            <table>
+              <thead><tr><th>주택형</th><th>공급</th><th>해당지역</th><th>기타지역</th></tr></thead>
+              <tbody>
+                {n.competition.map((c) => (
+                  <tr key={c.type}>
+                    <td>{c.type}</td>
+                    <td>{c.supply ?? '-'}</td>
+                    <td>{fmtRate(c.local)}</td>
+                    <td>{fmtRate(c.other)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+      {!!n.scores?.length && (
+        <section>
+          <h3>당첨 가점</h3>
+          <div className="table-wrap">
+            <table>
+              <thead><tr><th>주택형</th><th>거주</th><th>최저</th><th>평균</th><th>최고</th></tr></thead>
+              <tbody>
+                {n.scores.map((x, i) => (
+                  <tr key={i}><td>{x.type}</td><td>{x.reside ?? '-'}</td><td>{x.min ?? '-'}</td><td>{x.avg ?? '-'}</td><td>{x.max ?? '-'}</td></tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
       {!!n.models?.length && (
         <section>
           <h3>주택형</h3>
@@ -185,6 +228,8 @@ export function NoticeDetail({ notice: n, profile, hasProfile, today, saved, onT
         {n.geoPrecision === 'region' && <div>※ 지도 위치는 시·도 중심 근사값입니다 (정확한 주소 미제공).</div>}
         {n.geoPrecision === 'district' && <div>※ 지도 위치는 시·군·구 또는 동 단위 근사값입니다.</div>}
         {n.firstSeen && <div>최초 수집: {n.firstSeen}</div>}
+        {n.manual && <div>※ 관리자가 수동 등록한 공고입니다.</div>}
+        {n.note && <div>메모: {n.note}</div>}
       </section>
     </aside>
   );

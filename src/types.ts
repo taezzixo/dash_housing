@@ -55,7 +55,7 @@ export interface NoticeDates {
 
 export interface Notice {
   id: string;
-  source: 'applyhome' | 'lh' | 'youth-seoul';
+  source: 'applyhome' | 'lh' | 'youth-seoul' | 'manual';
   category: Category;
   subType?: string; // 민영/국민/오피스텔/행복주택 등
   name: string;
@@ -84,6 +84,10 @@ export interface Notice {
   firstSeen?: string; // 최초 수집일 (YYYY-MM-DD)
   changes?: NoticeChange[]; // 수집 간 일정 변경 이력
   removedAt?: string; // 진행 중이던 공고가 출처에서 사라진 날 (취소·삭제 의심)
+  competition?: Competition[]; // 1순위 경쟁률 (접수 마감 APT)
+  scores?: ScoreStat[]; // 당첨가점
+  manual?: boolean; // 관리자 수동 등록
+  note?: string; // 관리자 메모
 }
 
 export interface NoticeChange {
@@ -133,4 +137,40 @@ export interface ProgramResult {
   label: string;
   verdict: Verdict;
   reasons: string[];
+}
+
+export interface Competition {
+  type: string;
+  supply?: number;
+  local?: { req: number; rate?: number }; // 1순위 해당지역
+  other?: { req: number; rate?: number }; // 1순위 기타지역(합산)
+}
+export interface ScoreStat {
+  type: string;
+  reside?: string;
+  min?: number;
+  max?: number;
+  avg?: number;
+}
+
+// 관리자 수동 보정 (public/data/overrides.json) — GitHub에서 편집
+export interface Overrides {
+  hide?: string[]; // 숨길 공고 id
+  patch?: Record<string, Partial<Pick<Notice, 'lat' | 'lng' | 'geoPrecision' | 'address' | 'name' | 'url'>> & { note?: string }>;
+  manual?: Notice[]; // 수동 등록 공고 (SH·GH 등)
+}
+
+export interface RunLog {
+  last: Run;
+  history: Run[];
+}
+export interface Run {
+  runAt: string;
+  durationSec: number;
+  ok: boolean;
+  total: number;
+  changedToday?: number;
+  removedToday?: number;
+  geo?: Record<string, number>;
+  sources: { id: string; label: string; ok: boolean; count: number; error?: string; ms?: number }[];
 }

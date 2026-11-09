@@ -1,0 +1,13 @@
+// Cloudflare Workers (정적 자산) 배포 설정
+// Cloudflare 대시보드의 Workers 프로젝트 "dash-housing"가 main 푸시마다
+//   빌드: npm run build  →  배포: npx wrangler deploy
+// 를 실행한다. dist 폴더를 그대로 정적 사이트로 서빙한다.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "dash-housing",
+  "compatibility_date": "2026-09-01",
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "single-page-application"
+  }
+}
