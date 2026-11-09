@@ -6,7 +6,8 @@ export type Category =
   | 'REMNDR' // APT 무순위/잔여세대
   | 'PBL_PVT_RENT' // 공공지원 민간임대
   | 'OPT' // 임의공급
-  | 'LH'; // LH 분양·임대 공고
+  | 'LH' // LH 분양·임대 공고
+  | 'YOUTH'; // 서울시 청년안심주택
 
 export const CATEGORY_LABEL: Record<Category, string> = {
   APT: 'APT 분양',
@@ -15,6 +16,7 @@ export const CATEGORY_LABEL: Record<Category, string> = {
   PBL_PVT_RENT: '공공지원 민간임대',
   OPT: '임의공급',
   LH: 'LH 분양·임대',
+  YOUTH: '청년안심주택',
 };
 
 export interface NoticeModel {
@@ -53,7 +55,7 @@ export interface NoticeDates {
 
 export interface Notice {
   id: string;
-  source: 'applyhome' | 'lh';
+  source: 'applyhome' | 'lh' | 'youth-seoul';
   category: Category;
   subType?: string; // 민영/국민/오피스텔/행복주택 등
   name: string;

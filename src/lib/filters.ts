@@ -26,6 +26,7 @@ export function receiptStatus(n: Notice, today: string): ReceiptStatus {
   if (start && today < start) return 'upcoming';
   if (end && today > end) return 'closed';
   if (!start && end) return today <= end ? 'open' : 'closed';
+  if (start && !end) return today === start ? 'open' : 'unknown'; // 마감일 미제공 (청년안심주택 등)
   return 'open';
 }
 

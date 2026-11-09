@@ -140,6 +140,20 @@ export function evaluate(n: Notice, p: Profile, today = new Date(), versions?: C
     return out;
   }
 
+  if (n.category === 'YOUTH') {
+    // 서울시 청년안심주택: 청년(만19~39세) 또는 신혼부부, 무주택. 소득·자산 기준은 공공/민간·공급유형별로 상이
+    const c = new Check();
+    checkHomeless(c, p);
+    if (age !== undefined && age >= 19 && age <= 39) c.ok(`청년 계층(만 ${age}세)`);
+    else if (p.marital === 'married') c.ok('신혼부부 계층 해당 가능');
+    else if (age === undefined) c.warn('출생연도를 입력하세요 (만 19~39세 대상)');
+    else c.fail(`만 ${age}세 — 청년(만 19~39세) 대상 아님`);
+    if (p.region !== '서울') c.warn('서울 거주 요건은 공고별로 다름 — 공고문 확인');
+    c.warn('소득·자산 기준은 공공/민간·공급유형별로 다름 — 공고문 확인');
+    out.push(c.result('youthHousing', '청년안심주택 기본 자격'));
+    return out;
+  }
+
   if (n.category === 'LH') {
     const c = new Check();
     checkHomeless(c, p);

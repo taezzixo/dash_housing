@@ -39,3 +39,13 @@ test('주소 후보: 괄호 지번 우선, 지구 이름은 시군구로 대체'
   const g = geoCandidates('경기도 시흥시 거모지구 내 A-6블록');
   assert.equal(g.at(-1).q, '경기도 시흥시');
 });
+
+import { normYouth, stationQuery } from '../sources/youth-seoul.mjs';
+test('청년안심주택 정규화·역 이름 검색어', () => {
+  const n = normYouth({ boardId: 6724, nttSj: '[민간임대] 화랑대역 에이트플레이스 추가모집공고', optn1: '2026-11-05', optn2: '2', optn4: '2026-11-06', optn5: '2', optn3: '㈜대한' });
+  assert.equal(n.id, 'ys-6724');
+  assert.equal(n.dates.announce, '2026-11-05');
+  assert.equal(n.subType, '청년안심주택 · 민간 · 추가');
+  assert.equal(n.geoKeyword, '서울 화랑대역');
+  assert.equal(stationQuery('[민간임대] 숭곡초교역(예정) 성북펠릭스 추가모집공고'), '서울 숭곡초교역');
+});

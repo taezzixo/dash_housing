@@ -65,6 +65,10 @@ const BY_PROGRAM: Record<string, ChecklistItem[]> = {
   ],
   remndr: [{ id: 'homeless', label: '무주택 서약서', where: '사업주체 양식' }],
   open: [],
+  youthHousing: [
+    { id: 'income', label: '소득·자산 확인 서류 (공고별 상이)', where: '홈택스/건강보험공단' },
+    { id: 'consent', label: '개인정보·금융정보 제공 동의서', where: '사업자 양식' },
+  ],
 };
 
 export function buildChecklist(n: Notice, results: ProgramResult[]): ChecklistItem[] {

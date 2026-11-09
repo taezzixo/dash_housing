@@ -7,6 +7,7 @@ import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { geoCandidates } from './lib/geo.mjs';
 import { trackChanges } from './lib/track.mjs';
+import { fetchYouthSeoul } from './sources/youth-seoul.mjs';
 
 const KEY = process.env.DATA_GO_KR_KEY;
 const KAKAO = process.env.KAKAO_REST_KEY;
@@ -233,7 +234,8 @@ async function geocode(notices) {
   const stat = { address: 0, district: 0, region: 0, none: 0 };
   for (const n of notices) {
     let hit = null;
-    for (const c of geoCandidates(n.address)) {
+    const cands = n.address ? geoCandidates(n.address) : n.geoKeyword ? [{ q: n.geoKeyword, precision: 'district' }] : [];
+    for (const c of cands) {
       if (!(c.q in cache) && KAKAO) {
         cache[c.q] = await kakaoLookup(c.q);
         calls++;
@@ -254,6 +256,7 @@ async function geocode(notices) {
         hit = { lat: c[0] + ((h % 1000) / 1000 - 0.5) * 0.08, lng: c[1] + (((h >> 10) % 1000) / 1000 - 0.5) * 0.08, precision: 'region' };
       }
     }
+    delete n.geoKeyword;
     if (hit) {
       n.lat = hit.lat;
       n.lng = hit.lng;
@@ -299,6 +302,15 @@ try {
   okSources.add('lh');
 } catch (e) {
   console.error('LH 수집 실패:', e.message);
+}
+try {
+  const ys = await fetchYouthSeoul(ymd(since));
+  console.log(`서울 청년안심주택: ${ys.length}건`);
+  notices.push(...ys);
+  sources.push('서울주거포털 청년안심주택 모집공고');
+  okSources.add('youth-seoul');
+} catch (e) {
+  console.error('청년안심주택 수집 실패:', e.message);
 }
 if (!notices.length) {
   console.error('수집된 공고가 없습니다. 기존 데이터를 유지합니다.');
