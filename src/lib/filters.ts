@@ -1,13 +1,21 @@
 import type { Notice } from '../types.ts';
 
 // 접수 상태 (D1)
-export type ReceiptStatus = 'upcoming' | 'open' | 'closed' | 'unknown';
+// waiting: 접수는 끝났지만 당첨자 발표·계약이 남은 공고 (신청자에게는 아직 진행 중)
+export type ReceiptStatus = 'upcoming' | 'open' | 'waiting' | 'closed' | 'unknown';
 export const RECEIPT_LABEL: Record<ReceiptStatus, string> = {
   upcoming: '접수예정',
   open: '접수중',
-  closed: '접수마감',
+  waiting: '발표·계약 대기',
+  closed: '지난 공고',
   unknown: '일정확인',
 };
+
+function addDays(ymd: string, n: number) {
+  const t = new Date(ymd + 'T00:00:00Z');
+  t.setUTCDate(t.getUTCDate() + n);
+  return t.toISOString().slice(0, 10);
+}
 
 export function receiptWindow(n: Notice): { start?: string; end?: string } {
   const d = n.dates;
@@ -17,17 +25,38 @@ export function receiptWindow(n: Notice): { start?: string; end?: string } {
 }
 
 export function receiptStatus(n: Notice, today: string): ReceiptStatus {
+  const st = rawStatus(n, today);
+  if (st !== 'closed') return st;
+  // 접수 마감 후에도 당첨 발표·계약이 남아 있으면 진행 중으로 본다
+  const d = n.dates;
+  const after = [d.winner, d.contractStart, d.contractEnd].filter(Boolean) as string[];
+  return after.some((x) => x >= today) ? 'waiting' : 'closed';
+}
+
+function rawStatus(n: Notice, today: string): ReceiptStatus {
   if (n.status) {
     if (/접수중/.test(n.status)) return 'open';
     if (/마감|완료/.test(n.status)) return 'closed';
   }
   const { start, end } = receiptWindow(n);
-  if (!start && !end) return 'unknown';
+  if (!start && !end) {
+    // 일정 정보가 없으면 공고일로 판단 (60일 지나면 지난 공고)
+    return n.dates.announce && addDays(n.dates.announce, 60) < today ? 'closed' : 'unknown';
+  }
   if (start && today < start) return 'upcoming';
   if (end && today > end) return 'closed';
   if (!start && end) return today <= end ? 'open' : 'closed';
-  if (start && !end) return today === start ? 'open' : 'unknown'; // 마감일 미제공 (청년안심주택 등)
+  if (start && !end) {
+    // 마감일 미제공 (청년안심주택 등): 신청일 당일은 접수중, 14일 지나면 지난 공고
+    if (today === start) return 'open';
+    return addDays(start, 14) < today ? 'closed' : 'unknown';
+  }
   return 'open';
+}
+
+/** 완전히 끝난 공고 (접수·발표·계약 모두 지남) */
+export function isPast(n: Notice, today: string): boolean {
+  return receiptStatus(n, today) === 'closed';
 }
 
 type Bucket = { key: string; label: string; min?: number; max?: number };

@@ -59,3 +59,30 @@ test('SEO 페이지: 제목·일정·딥링크·HTML 이스케이프', () => {
   assert.match(html, /rel="canonical" href="https:\/\/x.kr\/n\/ah-1-1"/);
   assert.equal(ovNode([{ id: 'a', name: 'a', dates: {} }], { hide: ['a'] }).length, 0);
 });
+
+import { splitArchive } from './track.mjs';
+test('수집 기간 밖 공고는 취소 의심으로 보지 않음', () => {
+  const prev = [{ id: 'old', source: 'applyhome', name: 'O', dates: { announce: '2026-07-01', contractEnd: '2026-12-01' } }];
+  const out = trackChanges(prev, [], '2026-11-09', new Set(['applyhome']), '2026-08-11');
+  assert.equal(out[0].id, 'old');
+  assert.ok(!out[0].removedAt);
+});
+
+test('끝난 공고는 보관으로 이동, 1년 지난 보관은 삭제, 경쟁률 유지', () => {
+  const notices = [
+    { id: 'live', dates: { announce: '2026-11-01', contractEnd: '2026-12-01' } },
+    { id: 'done', dates: { announce: '2026-09-01', contractEnd: '2026-10-20' }, competition: [{ type: '84A' }] },
+  ];
+  const prevArchive = [{ id: 'ancient', dates: { announce: '2025-09-01' } }, { id: 'kept', dates: { announce: '2026-03-01' } }];
+  const { current, archive } = splitArchive(notices, prevArchive, '2026-11-09');
+  assert.deepEqual(current.map((n) => n.id), ['live']);
+  assert.deepEqual(archive.map((n) => n.id), ['done', 'kept']);
+  assert.equal(archive[0].competition.length, 1);
+});
+
+import { lastDate } from './track.mjs';
+test('마감일 없는 공고의 종료일 추정 (클라이언트 상태와 일치)', () => {
+  assert.equal(lastDate({ dates: { announce: '2026-11-05', receiptStart: '2026-11-06' } }), '2026-11-20');
+  assert.equal(lastDate({ dates: { announce: '2026-11-01' } }), '2026-12-31');
+  assert.equal(lastDate({ dates: { announce: '2026-11-01', receiptEnd: '2026-11-15', winner: '2026-11-25' } }), '2026-11-25');
+});

@@ -6,13 +6,14 @@
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { geoCandidates } from './lib/geo.mjs';
-import { trackChanges } from './lib/track.mjs';
+import { splitArchive, trackChanges } from './lib/track.mjs';
 import { fetchYouthSeoul } from './sources/youth-seoul.mjs';
 import { fetchCompetition, needsCompetition } from './lib/competition.mjs';
 
 const KEY = process.env.DATA_GO_KR_KEY;
 const KAKAO = process.env.KAKAO_REST_KEY;
-const DAYS_BACK = Number(process.env.DAYS_BACK ?? 60);
+const DAYS_BACK = Number(process.env.DAYS_BACK ?? 90);
+const ARCHIVE = 'public/data/archive.json';
 const OUT = 'public/data/notices.json';
 const GEO_CACHE = 'data/geocache.json';
 
@@ -349,8 +350,15 @@ if (existsSync(OUT)) {
   }
 }
 
-// 경쟁률·당첨가점: 접수가 끝난 APT만. 이미 받은 결과는 재사용
-const prevById = new Map(prev.map((n) => [n.id, n]));
+let prevArchive = [];
+try {
+  prevArchive = JSON.parse(await readFile(ARCHIVE, 'utf8')).notices ?? [];
+} catch {
+  /* 첫 보관 */
+}
+
+// 경쟁률·당첨가점: 접수가 끝난 APT만. 이미 받은 결과는 재사용 (보관 파일 포함)
+const prevById = new Map([...prevArchive, ...prev].map((n) => [n.id, n]));
 let cmpCalls = 0;
 let cmpOk = true;
 for (const n of notices) {
@@ -375,14 +383,21 @@ for (const n of notices) {
 console.log(`경쟁률: 신규 조회 ${cmpCalls}건`);
 runSources.push({ id: 'competition', label: '청약홈 경쟁률·당첨가점', ok: cmpOk, count: notices.filter((n) => n.competition).length });
 
-notices = trackChanges(prev, notices, ymd(today), okSources);
+notices = trackChanges(prev, notices, ymd(today), okSources, ymd(since));
 const changed = notices.filter((n) => n.changes?.some((c) => c.at === ymd(today))).length;
 const removed = notices.filter((n) => n.removedAt === ymd(today)).length;
 console.log(`변경 감지: 일정 변경 ${changed}건, 사라진 공고 ${removed}건`);
 notices.sort((a, b) => (b.dates.announce ?? '').localeCompare(a.dates.announce ?? ''));
+
+// 끝난 공고는 보관 파일(1년)로 이동 — 첫 화면은 가볍게, 지난 공고·경쟁률은 필요할 때 불러온다
+const { current, archive } = splitArchive(notices, prevArchive, ymd(today));
+console.log(`보관: 진행 ${current.length}건 / 지난 공고 ${archive.length}건`);
+notices = current;
 await mkdir('public/data', { recursive: true });
-await writeFile(OUT, JSON.stringify({ generatedAt: new Date().toISOString(), sample: false, sources, notices }));
+const generatedAt = new Date().toISOString();
+await writeFile(OUT, JSON.stringify({ generatedAt, sample: false, sources, notices }));
+await writeFile(ARCHIVE, JSON.stringify({ generatedAt, notices: archive }));
 const geo = {};
 for (const n of notices) geo[n.geoPrecision ?? 'none'] = (geo[n.geoPrecision ?? 'none'] ?? 0) + 1;
-await writeRunLog({ ok: runSources.every((x) => x.ok), total: notices.length, changedToday: changed, removedToday: removed, geo });
+await writeRunLog({ ok: runSources.every((x) => x.ok), total: notices.length, archived: archive.length, changedToday: changed, removedToday: removed, geo });
 console.log(`저장: ${OUT} (${notices.length}건)`);

@@ -79,7 +79,10 @@ async function main() {
   if (!existsSync(`${DIST}/data/notices.json`)) return console.log('prerender: dist/data/notices.json 없음 → 건너뜀');
   const file = JSON.parse(await readFile(`${DIST}/data/notices.json`, 'utf8'));
   const ov = existsSync(`${DIST}/data/overrides.json`) ? JSON.parse(await readFile(`${DIST}/data/overrides.json`, 'utf8')) : null;
-  const notices = applyOverrides(file.notices, ov);
+  // 지난 공고(보관)도 공고별 페이지를 만든다 — 경쟁률·당첨가점 검색 유입
+  const arch = existsSync(`${DIST}/data/archive.json`) ? JSON.parse(await readFile(`${DIST}/data/archive.json`, 'utf8')).notices ?? [] : [];
+  const ids = new Set(file.notices.map((n) => n.id));
+  const notices = applyOverrides([...file.notices, ...arch.filter((n) => !ids.has(n.id))], ov);
   await mkdir(`${DIST}/n`, { recursive: true });
   const opts = { site: SITE, generatedAt: file.generatedAt };
   for (const n of notices) await writeFile(`${DIST}/n/${fileId(n.id)}.html`, noticePage(n, opts));

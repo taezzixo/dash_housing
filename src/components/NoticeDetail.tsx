@@ -4,6 +4,7 @@ import { CATEGORY_LABEL } from '../types.ts';
 import { evaluate } from '../lib/eligibility.ts';
 import { buildChecklist } from '../lib/checklist.ts';
 import { buildIcs, dday, eventsOf } from '../lib/schedule.ts';
+import { RECEIPT_LABEL, receiptStatus } from '../lib/filters.ts';
 
 const VERDICT_LABEL = { likely: '조건 충족', check: '추가 확인', no: '조건 불충족' } as const;
 const FIELD_LABEL: Record<string, string> = {
@@ -58,9 +59,11 @@ interface Props {
   onToggleSave: () => void;
   onClose: () => void;
   onEditProfile: () => void;
+  related?: Notice[]; // 같은 단지의 다른 공고 (최초 분양 ↔ 무순위·추가모집)
+  onSelectRelated?: (id: string) => void;
 }
 
-export function NoticeDetail({ notice: n, profile, hasProfile, today, saved, onToggleSave, onClose, onEditProfile }: Props) {
+export function NoticeDetail({ notice: n, profile, hasProfile, today, saved, onToggleSave, onClose, onEditProfile, related = [], onSelectRelated }: Props) {
   const results = evaluate(n, profile);
   const checklist = buildChecklist(n, results);
   const [done, setDone] = useChecked(n.id);
@@ -121,6 +124,32 @@ export function NoticeDetail({ notice: n, profile, hasProfile, today, saved, onT
           })}
         </ol>
       </section>
+
+      {related.length > 0 && (
+        <section>
+          <h3>같은 단지 다른 공고 <small className="muted">{related.length}건</small></h3>
+          <ul className="related">
+            {related.slice(0, 6).map((r) => {
+              const st = receiptStatus(r, today);
+              const rates = (r.competition ?? []).map((c) => c.local?.rate ?? c.other?.rate).filter((x): x is number => x !== undefined && x > 0);
+              const mins = (r.scores ?? []).map((x) => x.min).filter((x): x is number => x !== undefined);
+              return (
+                <li key={r.id}>
+                  <button className="link" onClick={() => onSelectRelated?.(r.id)}>
+                    <span className={`tag st-${st}`}>{RECEIPT_LABEL[st]}</span> <b>{CATEGORY_LABEL[r.category]}</b> · {r.dates.announce ?? '-'} 공고
+                    <div className="small muted">
+                      {r.name}
+                      {rates.length > 0 && ` · 1순위 최고 ${Math.max(...rates).toFixed(1)}:1`}
+                      {mins.length > 0 && ` · 최저 가점 ${Math.min(...mins)}점`}
+                    </div>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+          <p className="small muted">공고명으로 같은 단지를 찾은 결과입니다. 다른 단지가 섞일 수 있습니다.</p>
+        </section>
+      )}
 
       <section>
         <h3>내 자격 판정 <span className="beta-tag">베타</span></h3>

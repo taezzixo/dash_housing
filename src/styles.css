@@ -286,3 +286,14 @@ fieldset label.check {
 .search-btn { width: 100%; padding: 12px; font-size: 15px; font-weight: 700; }
 .tabs button { min-width: 0; }
 .body.fade .search-bar { bottom: 50px; }
+
+/* ---- v0.5: 지난 공고·발표 대기·추가모집 ---- */
+.tag.st-waiting { background: #ede9fe; color: #6d28d9; }
+@media (prefers-color-scheme: dark) { .tag.st-waiting { background: #2e1065; color: #c4b5fd; } }
+.tag.hot { background: #ffedd5; color: #c2410c; }
+@media (prefers-color-scheme: dark) { .tag.hot { background: #431407; color: #fdba74; } }
+.card.past { opacity: .72; }
+.card.past:hover, .card.past.active { opacity: 1; }
+.related { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.related li { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
+.related .link { width: 100%; }

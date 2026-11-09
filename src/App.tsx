@@ -6,6 +6,7 @@ import { clearProfile, loadProfile, REGIONS, saveProfile } from './lib/profile.t
 import { dday, nextEvent, todayKST } from './lib/schedule.ts';
 import type { Bounds, ReceiptStatus } from './lib/filters.ts';
 import { AREA_BUCKETS, PRICE_BUCKETS, RECEIPT_LABEL, inBounds, matchArea, matchPrice, receiptStatus, receiptWindow, recentlyChanged } from './lib/filters.ts';
+import { complexKey, findRelated, isReoffer } from './lib/related.ts';
 import { KakaoMap } from './components/KakaoMap.tsx';
 import { NoticeDetail } from './components/NoticeDetail.tsx';
 import { ProfileForm } from './components/ProfileForm.tsx';
@@ -16,7 +17,7 @@ import { UI } from './config/ui.ts';
 import { downloadIcs } from './components/NoticeDetail.tsx';
 
 type Tab = 'map' | 'list' | 'saved' | 'agenda' | 'me';
-type StatusFilter = '' | 'active' | ReceiptStatus;
+type StatusFilter = '' | ReceiptStatus; // '' = 진행 중 전체 (지난 공고는 '지난 공고' 체크 시 포함)
 const SAVED_KEY = 'dash_housing.saved.v1';
 const PAGE = 100;
 
@@ -48,7 +49,10 @@ export default function App() {
   const [q, setQ] = useState('');
   const [cat, setCat] = useState<Category | ''>('');
   const [region, setRegion] = useState('');
-  const [status, setStatus] = useState<StatusFilter>('active');
+  const [status, setStatus] = useState<StatusFilter>('');
+  const [showPast, setShowPast] = useState(false);
+  const [archive, setArchive] = useState<Notice[] | null>(null);
+  const [overrides, setOverrides] = useState<Overrides | null>(null);
   const [area, setArea] = useState('');
   const [price, setPrice] = useState('');
   const [onlyMatch, setOnlyMatch] = useState(false);
@@ -63,9 +67,28 @@ export default function App() {
       fetch(`${base}data/notices.json`, { cache: 'no-cache' }).then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))),
       fetch(`${base}data/overrides.json`, { cache: 'no-cache' }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
     ])
-      .then(([file, ov]: [NoticeFile, Overrides | null]) => setData({ ...file, notices: applyOverrides(file.notices, ov) }))
+      .then(([file, ov]: [NoticeFile, Overrides | null]) => {
+        setOverrides(ov);
+        setData({ ...file, notices: applyOverrides(file.notices, ov) });
+      })
       .catch((e) => setLoadError(String(e.message ?? e)));
   }, []);
+
+  // 지난 공고(보관 파일)는 첫 화면이 뜬 뒤 천천히 불러온다 — 지난 공고 보기·같은 단지 이전 공고 연결에 사용
+  useEffect(() => {
+    if (!data || archive) return;
+    const t = setTimeout(() => {
+      fetch(`${import.meta.env.BASE_URL}data/archive.json`, { cache: 'no-cache' })
+        .then((r) => (r.ok ? r.json() : { notices: [] }))
+        .then((a: { notices: Notice[] }) => {
+          const ids = new Set(data.notices.map((n) => n.id));
+          const hide = new Set(overrides?.hide ?? []);
+          setArchive(applyOverrides((a.notices ?? []).filter((n) => !ids.has(n.id) && !hide.has(n.id)), { patch: overrides?.patch }));
+        })
+        .catch(() => setArchive([]));
+    }, showPast ? 0 : 1500);
+    return () => clearTimeout(t);
+  }, [data, archive, showPast, overrides]);
 
   // 선택한 공고를 주소창에 반영 (공유 가능한 링크)
   useEffect(() => {
@@ -86,13 +109,15 @@ export default function App() {
     }
   }, [saved]);
 
-  const notices = data?.notices ?? [];
+  const current = data?.notices ?? [];
+  const allNotices = useMemo(() => (archive?.length ? [...current, ...archive] : current), [current, archive]);
+  const notices = showPast ? allNotices : current;
   const verdicts = useMemo(() => {
     const m = new Map<string, Verdict>();
     if (!touched) return m;
-    for (const n of notices) m.set(n.id, bestVerdict(evaluate(n, profile)));
+    for (const n of allNotices) m.set(n.id, bestVerdict(evaluate(n, profile)));
     return m;
-  }, [notices, profile, touched]);
+  }, [allNotices, profile, touched]);
 
   // 지도 외 조건으로 거른 목록 (지도 마커용)
   const baseFiltered = useMemo(() => {
@@ -103,15 +128,13 @@ export default function App() {
       if (cat && n.category !== cat) return false;
       if (region && n.region !== region) return false;
       if (qq && !`${n.name} ${n.address ?? ''} ${n.region ?? ''}`.includes(qq)) return false;
-      if (status) {
-        const st = receiptStatus(n, today);
-        if (status === 'active' ? st === 'closed' : st !== status) return false;
-      }
+      const st = receiptStatus(n, today);
+      if (status ? st !== status : !showPast && st === 'closed') return false;
       if (!matchArea(n, ab) || !matchPrice(n, pb)) return false;
       return true;
     });
     return list;
-  }, [notices, q, cat, region, status, area, price, today]);
+  }, [notices, q, cat, region, status, showPast, area, price, today]);
   // 맞춤 검색: 불충족 제외 + 매칭 점수순 (맞춤 패널 개수는 제외 전 목록 기준)
   const filtered = useMemo(() => {
     if (!(onlyMatch && touched)) return baseFiltered;
@@ -122,7 +145,11 @@ export default function App() {
   const listed = useMemo(() => (syncMap && bounds ? filtered.filter((n) => inBounds(n, bounds)) : filtered), [filtered, syncMap, bounds]);
   useEffect(() => setLimit(PAGE), [listed.length]);
 
-  const selected = notices.find((n) => n.id === selectedId);
+  const selected = allNotices.find((n) => n.id === selectedId);
+  const related = useMemo(() => (selected ? findRelated(selected, allNotices) : []), [selected, allNotices]);
+  // 관심 저장한 단지의 추가모집·무순위 공고 표시용
+  const savedKeys = useMemo(() => new Set(allNotices.filter((n) => saved.includes(n.id)).map((n) => complexKey(n.name))), [allNotices, saved]);
+  const pastIds = useMemo(() => new Set(notices.filter((n) => receiptStatus(n, today) === 'closed').map((n) => n.id)), [notices, today]);
   // 같은 공고(마커·카드)를 다시 누르면 닫힘. 데스크톱에서 패널이 닫혀 있었다면 다시 닫아 지도를 넓힌다
   // 탭을 바꾸면 오른쪽 패널을 맨 위부터 보여준다 (맞춤 검색 결과 요약이 먼저 보이도록)
   const sideRef = useRef<HTMLElement>(null);
@@ -188,12 +215,12 @@ export default function App() {
           <option value="">전국</option>
           {REGIONS.map((r) => <option key={r}>{r}</option>)}
         </select>
-        <select value={status} onChange={(e) => setStatus(e.target.value as StatusFilter)} aria-label="접수 상태">
-          <option value="active">진행·예정</option>
+        <select value={status} onChange={(e) => { const v = e.target.value as StatusFilter; setStatus(v); if (v === 'closed') setShowPast(true); }} aria-label="접수 상태">
+          <option value="">진행 중 전체</option>
           <option value="upcoming">접수예정</option>
           <option value="open">접수중</option>
-          <option value="closed">접수마감</option>
-          <option value="">전체 상태</option>
+          <option value="waiting">발표·계약 대기</option>
+          <option value="closed">지난 공고만</option>
         </select>
         <select value={area} onChange={(e) => setArea(e.target.value)} aria-label="면적">
           {AREA_BUCKETS.map((b) => <option key={b.key} value={b.key}>{b.label}</option>)}
@@ -201,6 +228,10 @@ export default function App() {
         <select value={price} onChange={(e) => setPrice(e.target.value)} aria-label="가격">
           {PRICE_BUCKETS.map((b) => <option key={b.key} value={b.key}>{b.label}</option>)}
         </select>
+        <label className="check" title="접수·발표·계약이 모두 끝난 공고(최근 1년)를 함께 표시합니다. 경쟁률·당첨가점 참고용">
+          <input type="checkbox" checked={showPast} onChange={(e) => { setShowPast(e.target.checked); if (!e.target.checked && status === 'closed') setStatus(''); }} />
+          지난 공고{showPast && archive === null ? ' (불러오는 중)' : ''}
+        </label>
         <label className="check">
           <input type="checkbox" checked={onlyMatch} onChange={(e) => { setOnlyMatch(e.target.checked); if (e.target.checked && !touched) pickTab('me'); }} />
           내 조건 매칭순
@@ -209,14 +240,14 @@ export default function App() {
 
       <main className={`body tab-${tab} ${sideOpen ? 'side-open' : 'side-closed'}${UI.fadeBottom ? ' fade' : ''}`}>
         <section className="pane-map">
-          <KakaoMap notices={filtered} verdicts={verdicts} selectedId={selectedId} onSelect={select} onBoundsChange={setBounds} />
+          <KakaoMap notices={filtered} verdicts={verdicts} pastIds={pastIds} selectedId={selectedId} onSelect={select} onBoundsChange={setBounds} />
         </section>
 
         <section className="pane-side" ref={sideRef}>
           {tab === 'agenda' ? (
             <Agenda notices={notices} savedIds={saved} today={today} onSelect={select} />
           ) : tab === 'saved' ? (
-            <SavedList notices={notices.filter((n) => saved.includes(n.id))} today={today} verdicts={verdicts}
+            <SavedList notices={allNotices.filter((n) => saved.includes(n.id))} today={today} verdicts={verdicts}
               selectedId={selectedId} onSelect={select} onUnsave={toggleSave} onBrowse={() => pickTab('list')} />
           ) : tab === 'me' ? (
             <ProfileForm
@@ -228,7 +259,7 @@ export default function App() {
                 // 입력한 조건으로 맞춤 공고 검색: 진행·예정 공고 중 불충족 제외, 매칭 점수순
                 setTouched(true);
                 setOnlyMatch(true);
-                setStatus('active');
+                setStatus('');
                 setSyncMap(false);
                 pickTab('list');
               }}
@@ -252,6 +283,7 @@ export default function App() {
               {loadError && <p className="error">데이터를 불러오지 못했습니다: {loadError}</p>}
               {listed.slice(0, limit).map((n, i) => (
                 <NoticeCard key={n.id} n={n} today={today} verdict={verdicts.get(n.id)} saved={saved.includes(n.id)}
+                  savedComplex={!saved.includes(n.id) && isReoffer(n) && savedKeys.has(complexKey(n.name))}
                   active={n.id === selectedId} onClick={() => select(n.id)} ad={i === 4} />
               ))}
               {listed.length > limit && (
@@ -270,7 +302,7 @@ export default function App() {
         {selected && (
           <NoticeDetail notice={selected} profile={profile} hasProfile={touched} today={today}
             saved={saved.includes(selected.id)} onToggleSave={() => toggleSave(selected.id)} onClose={closeDetail}
-            onEditProfile={() => pickTab('me')} />
+            onEditProfile={() => pickTab('me')} related={related} onSelectRelated={(id) => setSelectedId(id)} />
         )}
       </main>
 
@@ -367,21 +399,32 @@ function MatchPanel({ notices, verdicts, touched, today, onSelect, onEditProfile
   );
 }
 
+// 지난 공고 카드 요약: 공고일 + 1순위 최고 경쟁률·최저 당첨가점
+function pastSummary(n: Notice): string {
+  const parts = [`${n.dates.announce ?? ''} 공고`];
+  const rates = (n.competition ?? []).map((c) => c.local?.rate ?? c.other?.rate).filter((r): r is number => r !== undefined && r > 0);
+  if (rates.length) parts.push(`1순위 최고 ${Math.max(...rates).toFixed(1)}:1`);
+  const mins = (n.scores ?? []).map((x) => x.min).filter((x): x is number => x !== undefined);
+  if (mins.length) parts.push(`최저 가점 ${Math.min(...mins)}점`);
+  return parts.join(' · ');
+}
+
 const V_LABEL = { likely: '조건 충족', check: '추가 확인', no: '조건 불충족' } as const;
 
-function NoticeCard({ n, today, verdict, saved, active, onClick, ad }: {
-  n: Notice; today: string; verdict?: Verdict; saved: boolean; active: boolean; onClick: () => void; ad: boolean;
+function NoticeCard({ n, today, verdict, saved, savedComplex, active, onClick, ad }: {
+  n: Notice; today: string; verdict?: Verdict; saved: boolean; savedComplex?: boolean; active: boolean; onClick: () => void; ad: boolean;
 }) {
   const next = nextEvent(n, today);
   const dd = next ? dday(next.start, today) : null;
   const st = receiptStatus(n, today);
   return (
     <>
-      <button className={`card ${active ? 'active' : ''}`} onClick={onClick}>
+      <button className={`card ${active ? 'active' : ''} ${st === 'closed' ? 'past' : ''}`} onClick={onClick}>
         <div className="card-top">
           <span className="tag">{CATEGORY_LABEL[n.category]}</span>
           {n.subType && <span className="tag soft">{n.subType}</span>}
           <span className={`tag st-${st}`}>{RECEIPT_LABEL[st]}</span>
+          {savedComplex && <span className="tag hot">관심 단지 추가모집</span>}
           {n.manual && <span className="tag soft">수동 등록</span>}
           {n.removedAt && <span className="tag danger">취소·삭제 의심</span>}
           {!n.removedAt && recentlyChanged(n, today) && <span className="tag warn">일정 변경</span>}
@@ -397,6 +440,7 @@ function NoticeCard({ n, today, verdict, saved, active, onClick, ad }: {
             <em>{dd !== null && dd <= 0 ? '진행중' : `D-${dd}`}</em>
           </span>
         )}
+        {!next && st === 'closed' && <span className="muted small">{pastSummary(n)}</span>}
       </button>
       {ad && <AdSlot />}
     </>

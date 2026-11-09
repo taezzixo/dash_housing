@@ -67,7 +67,7 @@ function RunPanel({ log }: { log: RunLog | null }) {
     <>
       <div className={`status ${r.ok ? 'ok' : 'bad'}`}>
         <b>{r.ok ? '✅ 마지막 수집 정상' : '⚠️ 마지막 수집에 실패한 출처가 있음'}</b>
-        <span>{new Date(r.runAt).toLocaleString('ko-KR')} · {r.durationSec}초 · 총 {r.total.toLocaleString()}건 · 오늘 일정 변경 {r.changedToday ?? 0} · 사라짐 {r.removedToday ?? 0}</span>
+        <span>{new Date(r.runAt).toLocaleString('ko-KR')} · {r.durationSec}초 · 진행 {r.total.toLocaleString()}건 · 지난 공고 보관 {(r.archived ?? 0).toLocaleString()}건 · 오늘 일정 변경 {r.changedToday ?? 0} · 사라짐 {r.removedToday ?? 0}</span>
       </div>
       <div className="cards">
         {r.sources.map((s) => (

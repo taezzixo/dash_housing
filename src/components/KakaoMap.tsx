@@ -38,12 +38,13 @@ function pinSvg(color: string) {
 interface Props {
   notices: Notice[];
   verdicts: Map<string, Verdict>;
+  pastIds?: Set<string>; // 지난 공고 (회색·흐리게)
   selectedId?: string;
   onSelect: (id: string) => void;
   onBoundsChange?: (b: Bounds) => void;
 }
 
-export function KakaoMap({ notices, verdicts, selectedId, onSelect, onBoundsChange }: Props) {
+export function KakaoMap({ notices, verdicts, pastIds, selectedId, onSelect, onBoundsChange }: Props) {
   const el = useRef<HTMLDivElement>(null);
   const map = useRef<any>(null);
   const clusterer = useRef<any>(null);
@@ -99,13 +100,14 @@ export function KakaoMap({ notices, verdicts, selectedId, onSelect, onBoundsChan
     const markers = notices
       .filter((n) => n.lat && n.lng)
       .map((n) => {
-        const v = verdicts.get(n.id) ?? 'none';
+        const past = !!pastIds?.has(n.id);
+        const v = past ? 'no' : verdicts.get(n.id) ?? 'none';
         const mk = new kakao.maps.Marker({
           position: new kakao.maps.LatLng(n.lat, n.lng),
           title: n.name,
           image: new kakao.maps.MarkerImage(pinSvg(COLOR[v]), new kakao.maps.Size(28, 38), { offset: new kakao.maps.Point(14, 38) }),
           // 위치 신뢰도가 낮은(시군구·시도 중심) 마커는 흐리게
-          opacity: n.geoPrecision === 'address' ? 1 : 0.55,
+          opacity: past ? 0.45 : n.geoPrecision === 'address' ? 1 : 0.55,
         });
         kakao.maps.event.addListener(mk, 'click', () => onSelectRef.current(n.id));
         return mk;
@@ -113,7 +115,7 @@ export function KakaoMap({ notices, verdicts, selectedId, onSelect, onBoundsChan
     clusterer.current.addMarkers(markers);
   }
 
-  useEffect(draw, [notices, verdicts]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(draw, [notices, verdicts, pastIds]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const kakao = window.kakao;

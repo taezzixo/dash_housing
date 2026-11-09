@@ -169,6 +169,7 @@ export interface Run {
   durationSec: number;
   ok: boolean;
   total: number;
+  archived?: number;
   changedToday?: number;
   removedToday?: number;
   geo?: Record<string, number>;
