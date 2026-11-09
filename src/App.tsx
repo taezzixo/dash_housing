@@ -17,7 +17,7 @@ import { UI } from './config/ui.ts';
 import { downloadIcs } from './components/NoticeDetail.tsx';
 
 type Tab = 'map' | 'list' | 'saved' | 'agenda' | 'me';
-type StatusFilter = '' | ReceiptStatus; // '' = 진행 중 전체 (지난 공고는 '지난 공고' 체크 시 포함)
+type StatusFilter = '' | ReceiptStatus; // '' = 접수 전·접수 중 전체. 접수가 끝난 공고(발표·계약 대기 포함)는 '지난 공고' 체크 시에만 표시
 const SAVED_KEY = 'dash_housing.saved.v1';
 const PAGE = 100;
 
@@ -90,6 +90,15 @@ export default function App() {
     return () => clearTimeout(t);
   }, [data, archive, showPast, overrides]);
 
+  // 날짜가 바뀐 뒤 탭으로 돌아오면 새로 불러온다 (매일 06:17 수집 데이터 + 오늘 기준 접수 상태 갱신)
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible' && todayKST() !== today) location.reload();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [today]);
+
   // 선택한 공고를 주소창에 반영 (공유 가능한 링크)
   useEffect(() => {
     const u = new URL(location.href);
@@ -129,7 +138,8 @@ export default function App() {
       if (region && n.region !== region) return false;
       if (qq && !`${n.name} ${n.address ?? ''} ${n.region ?? ''}`.includes(qq)) return false;
       const st = receiptStatus(n, today);
-      if (status ? st !== status : !showPast && st === 'closed') return false;
+      // 기본: 청약 접수일이 지난 공고는 숨김 (날짜는 매일 오늘 기준으로 다시 계산)
+      if (status ? st !== status : !showPast && (st === 'closed' || st === 'waiting')) return false;
       if (!matchArea(n, ab) || !matchPrice(n, pb)) return false;
       return true;
     });
@@ -149,7 +159,7 @@ export default function App() {
   const related = useMemo(() => (selected ? findRelated(selected, allNotices) : []), [selected, allNotices]);
   // 관심 저장한 단지의 추가모집·무순위 공고 표시용
   const savedKeys = useMemo(() => new Set(allNotices.filter((n) => saved.includes(n.id)).map((n) => complexKey(n.name))), [allNotices, saved]);
-  const pastIds = useMemo(() => new Set(notices.filter((n) => receiptStatus(n, today) === 'closed').map((n) => n.id)), [notices, today]);
+  const pastIds = useMemo(() => new Set(notices.filter((n) => ['closed', 'waiting'].includes(receiptStatus(n, today))).map((n) => n.id)), [notices, today]);
   // 같은 공고(마커·카드)를 다시 누르면 닫힘. 데스크톱에서 패널이 닫혀 있었다면 다시 닫아 지도를 넓힌다
   // 탭을 바꾸면 오른쪽 패널을 맨 위부터 보여준다 (맞춤 검색 결과 요약이 먼저 보이도록)
   const sideRef = useRef<HTMLElement>(null);
@@ -215,12 +225,12 @@ export default function App() {
           <option value="">전국</option>
           {REGIONS.map((r) => <option key={r}>{r}</option>)}
         </select>
-        <select value={status} onChange={(e) => { const v = e.target.value as StatusFilter; setStatus(v); if (v === 'closed') setShowPast(true); }} aria-label="접수 상태">
-          <option value="">진행 중 전체</option>
+        <select value={status} onChange={(e) => { const v = e.target.value as StatusFilter; setStatus(v); if (v === 'closed' || v === 'waiting') setShowPast(true); }} aria-label="접수 상태">
+          <option value="">접수 전·접수 중</option>
           <option value="upcoming">접수예정</option>
           <option value="open">접수중</option>
           <option value="waiting">발표·계약 대기</option>
-          <option value="closed">지난 공고만</option>
+          <option value="closed">발표·계약까지 끝난 공고</option>
         </select>
         <select value={area} onChange={(e) => setArea(e.target.value)} aria-label="면적">
           {AREA_BUCKETS.map((b) => <option key={b.key} value={b.key}>{b.label}</option>)}
@@ -228,8 +238,8 @@ export default function App() {
         <select value={price} onChange={(e) => setPrice(e.target.value)} aria-label="가격">
           {PRICE_BUCKETS.map((b) => <option key={b.key} value={b.key}>{b.label}</option>)}
         </select>
-        <label className="check" title="접수·발표·계약이 모두 끝난 공고(최근 1년)를 함께 표시합니다. 경쟁률·당첨가점 참고용">
-          <input type="checkbox" checked={showPast} onChange={(e) => { setShowPast(e.target.checked); if (!e.target.checked && status === 'closed') setStatus(''); }} />
+        <label className="check" title="청약 접수가 끝난 공고(발표·계약 대기 + 최근 1년 지난 공고)를 함께 표시합니다. 경쟁률·당첨가점 참고용">
+          <input type="checkbox" checked={showPast} onChange={(e) => { setShowPast(e.target.checked); if (!e.target.checked && (status === 'closed' || status === 'waiting')) setStatus(''); }} />
           지난 공고{showPast && archive === null ? ' (불러오는 중)' : ''}
         </label>
         <label className="check">
@@ -419,7 +429,7 @@ function NoticeCard({ n, today, verdict, saved, savedComplex, active, onClick, a
   const st = receiptStatus(n, today);
   return (
     <>
-      <button className={`card ${active ? 'active' : ''} ${st === 'closed' ? 'past' : ''}`} onClick={onClick}>
+      <button className={`card ${active ? 'active' : ''} ${st === 'closed' || st === 'waiting' ? 'past' : ''}`} onClick={onClick}>
         <div className="card-top">
           <span className="tag">{CATEGORY_LABEL[n.category]}</span>
           {n.subType && <span className="tag soft">{n.subType}</span>}
