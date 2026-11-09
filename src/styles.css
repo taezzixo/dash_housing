@@ -266,3 +266,23 @@ fieldset label.check {
 .filters .check, .list-head .check, .switch { align-items: center; gap: 8px; }
 .checklist label { display: grid; grid-template-columns: 18px 1fr; column-gap: 10px; align-items: start; }
 .checklist input { margin-top: 2px; }
+
+/* ---- v0.4: 하단 그라데이션(UI.fadeBottom), 관심 탭, 맞춤 검색 버튼 ---- */
+/* 지도 범례·목록 하단에서 하단 정보 줄로 갈수록 흐려짐. 끄려면 src/config/ui.ts 의 fadeBottom=false */
+.body.fade::after {
+  content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 64px; z-index: 6; pointer-events: none;
+  background: linear-gradient(to bottom, transparent 0%, color-mix(in srgb, var(--surface) 55%, transparent) 55%, var(--surface) 100%);
+}
+.body.fade .legend { z-index: 7; bottom: 18px; opacity: .92; }
+.body.fade .pane-side, .body.fade .detail { padding-bottom: 56px; }
+.body.fade ~ .app-foot { border-top-color: transparent; }
+
+.saved-row { position: relative; }
+.saved-row .card { width: 100%; padding-right: 44px; }
+.saved-row .unsave { position: absolute; top: 8px; right: 8px; width: 30px; height: 30px; font-size: 13px; }
+.empty { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+
+.search-bar { position: sticky; bottom: 0; padding: 12px 0 4px; margin-top: 8px; background: linear-gradient(to bottom, transparent, var(--bg) 35%); }
+.search-btn { width: 100%; padding: 12px; font-size: 15px; font-weight: 700; }
+.tabs button { min-width: 0; }
+.body.fade .search-bar { bottom: 50px; }

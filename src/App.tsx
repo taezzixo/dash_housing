@@ -12,8 +12,10 @@ import { ProfileForm } from './components/ProfileForm.tsx';
 import { Agenda } from './components/Agenda.tsx';
 import { AdSlot } from './components/AdSlot.tsx';
 import { applyOverrides } from './lib/overrides.ts';
+import { UI } from './config/ui.ts';
+import { downloadIcs } from './components/NoticeDetail.tsx';
 
-type Tab = 'map' | 'list' | 'agenda' | 'me';
+type Tab = 'map' | 'list' | 'saved' | 'agenda' | 'me';
 type StatusFilter = '' | 'active' | ReceiptStatus;
 const SAVED_KEY = 'dash_housing.saved.v1';
 const PAGE = 100;
@@ -93,11 +95,11 @@ export default function App() {
   }, [notices, profile, touched]);
 
   // 지도 외 조건으로 거른 목록 (지도 마커용)
-  const filtered = useMemo(() => {
+  const baseFiltered = useMemo(() => {
     const qq = q.trim();
     const ab = AREA_BUCKETS.find((b) => b.key === area)!;
     const pb = PRICE_BUCKETS.find((b) => b.key === price)!;
-    let list = notices.filter((n) => {
+    const list = notices.filter((n) => {
       if (cat && n.category !== cat) return false;
       if (region && n.region !== region) return false;
       if (qq && !`${n.name} ${n.address ?? ''} ${n.region ?? ''}`.includes(qq)) return false;
@@ -106,12 +108,15 @@ export default function App() {
         if (status === 'active' ? st === 'closed' : st !== status) return false;
       }
       if (!matchArea(n, ab) || !matchPrice(n, pb)) return false;
-      if (onlyMatch && touched && verdicts.get(n.id) === 'no') return false;
       return true;
     });
-    if (touched && onlyMatch) list = [...list].sort((a, b) => matchScore(b, profile) - matchScore(a, profile));
     return list;
-  }, [notices, q, cat, region, status, area, price, onlyMatch, touched, verdicts, profile, today]);
+  }, [notices, q, cat, region, status, area, price, today]);
+  // 맞춤 검색: 불충족 제외 + 매칭 점수순 (맞춤 패널 개수는 제외 전 목록 기준)
+  const filtered = useMemo(() => {
+    if (!(onlyMatch && touched)) return baseFiltered;
+    return baseFiltered.filter((n) => verdicts.get(n.id) !== 'no').sort((a, b) => matchScore(b, profile) - matchScore(a, profile));
+  }, [baseFiltered, onlyMatch, touched, verdicts, profile]);
 
   // 목록: 지도 영역 연동 (D2)
   const listed = useMemo(() => (syncMap && bounds ? filtered.filter((n) => inBounds(n, bounds)) : filtered), [filtered, syncMap, bounds]);
@@ -119,6 +124,11 @@ export default function App() {
 
   const selected = notices.find((n) => n.id === selectedId);
   // 같은 공고(마커·카드)를 다시 누르면 닫힘. 데스크톱에서 패널이 닫혀 있었다면 다시 닫아 지도를 넓힌다
+  // 탭을 바꾸면 오른쪽 패널을 맨 위부터 보여준다 (맞춤 검색 결과 요약이 먼저 보이도록)
+  const sideRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    sideRef.current?.scrollTo({ top: 0 });
+  }, [tab, onlyMatch]);
   const selectedRef = useRef(selectedId);
   selectedRef.current = selectedId;
   const closeDetail = () => {
@@ -197,24 +207,35 @@ export default function App() {
         </label>
       </div>
 
-      <main className={`body tab-${tab} ${sideOpen ? 'side-open' : 'side-closed'}`}>
+      <main className={`body tab-${tab} ${sideOpen ? 'side-open' : 'side-closed'}${UI.fadeBottom ? ' fade' : ''}`}>
         <section className="pane-map">
           <KakaoMap notices={filtered} verdicts={verdicts} selectedId={selectedId} onSelect={select} onBoundsChange={setBounds} />
         </section>
 
-        <section className="pane-side">
+        <section className="pane-side" ref={sideRef}>
           {tab === 'agenda' ? (
             <Agenda notices={notices} savedIds={saved} today={today} onSelect={select} />
+          ) : tab === 'saved' ? (
+            <SavedList notices={notices.filter((n) => saved.includes(n.id))} today={today} verdicts={verdicts}
+              selectedId={selectedId} onSelect={select} onUnsave={toggleSave} onBrowse={() => pickTab('list')} />
           ) : tab === 'me' ? (
             <ProfileForm
               profile={profile}
               persisted={persisted}
               onChange={(p) => { setProfile(p); setTouched(true); }}
               onPersist={(on) => { setPersisted(on); if (on) saveProfile(profile); else clearProfile(); }}
+              onSearch={() => {
+                // 입력한 조건으로 맞춤 공고 검색: 진행·예정 공고 중 불충족 제외, 매칭 점수순
+                setTouched(true);
+                setOnlyMatch(true);
+                setStatus('active');
+                setSyncMap(false);
+                pickTab('list');
+              }}
             />
           ) : (
             <div className="list">
-              <MatchPanel notices={filtered} verdicts={verdicts} touched={touched} today={today}
+              <MatchPanel notices={baseFiltered} verdicts={verdicts} touched={touched} today={today}
                 onSelect={select} onEditProfile={() => pickTab('me')} />
               <div className="list-head">
                 <span className="muted small">
@@ -254,7 +275,7 @@ export default function App() {
       </main>
 
       <nav className="tabs" aria-label="화면 전환">
-        {([['map', '🗺️', '지도'], ['list', '📋', '공고'], ['agenda', '📅', '일정'], ['me', '👤', '내 조건']] as const).map(([k, ic, label]) => (
+        {([['map', '🗺️', '지도'], ['list', '📋', '공고'], ['saved', '⭐', `관심${saved.length ? ` ${saved.length}` : ''}`], ['agenda', '📅', '일정'], ['me', '👤', '내 조건']] as const).map(([k, ic, label]) => (
           <button key={k} className={(desktop ? (k === 'map' ? !sideOpen : sideOpen && tab === k) : tab === k) ? 'on' : ''}
             aria-pressed={desktop ? (k === 'map' ? !sideOpen : sideOpen && tab === k) : tab === k} onClick={() => pickTab(k)}>
             <span>{ic}</span>{label}
@@ -266,6 +287,35 @@ export default function App() {
         <span>© 2026 Taezzi · Built Nov 2026<span className="foot-long"> · Data: Applyhome (REB), LH, Seoul Housing Portal</span></span>
         <span><span className="foot-long">For reference only — verify with official notices · </span><a href={`${import.meta.env.BASE_URL}privacy`}>Privacy</a> · <a href={`${import.meta.env.BASE_URL}terms`}>Terms</a></span>
       </footer>
+    </div>
+  );
+}
+
+// 관심 공고 탭: 저장한 공고만 모아 보기
+function SavedList({ notices, today, verdicts, selectedId, onSelect, onUnsave, onBrowse }: {
+  notices: Notice[]; today: string; verdicts: Map<string, Verdict>; selectedId?: string;
+  onSelect: (id: string) => void; onUnsave: (id: string) => void; onBrowse: () => void;
+}) {
+  const sorted = [...notices].sort((a, b) => (nextEvent(a, today)?.start ?? '9999').localeCompare(nextEvent(b, today)?.start ?? '9999'));
+  return (
+    <div className="list">
+      <div className="panel">
+        <div className="panel-head"><b>⭐ 관심 공고 {notices.length}건</b></div>
+        <p className="small muted" style={{ margin: '0 0 8px' }}>공고 상세에서 "관심 공고 저장"을 누르면 여기에 모입니다. 이 기기 브라우저에 저장됩니다.</p>
+        <button className="btn primary" disabled={!notices.length} onClick={() => downloadIcs(notices)}>📅 관심 공고 일정 캘린더로 받기</button>
+      </div>
+      {!notices.length && (
+        <div className="empty">
+          <p className="muted">아직 저장한 공고가 없습니다.</p>
+          <button className="btn" onClick={onBrowse}>공고 둘러보기</button>
+        </div>
+      )}
+      {sorted.map((n) => (
+        <div key={n.id} className="saved-row">
+          <NoticeCard n={n} today={today} verdict={verdicts.get(n.id)} saved active={n.id === selectedId} onClick={() => onSelect(n.id)} ad={false} />
+          <button className="icon-btn unsave" aria-label="관심 해제" title="관심 해제" onClick={() => onUnsave(n.id)}>✕</button>
+        </div>
+      ))}
     </div>
   );
 }

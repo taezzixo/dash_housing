@@ -7,9 +7,10 @@ interface Props {
   persisted: boolean;
   onChange: (p: Profile) => void;
   onPersist: (on: boolean) => void;
+  onSearch: () => void;
 }
 
-export function ProfileForm({ profile: p, persisted, onChange, onPersist }: Props) {
+export function ProfileForm({ profile: p, persisted, onChange, onPersist, onSearch }: Props) {
   const set = <K extends keyof Profile>(k: K, v: Profile[K]) => onChange({ ...p, [k]: v });
   const num = (k: keyof Profile) => ({
     type: 'number' as const,
@@ -88,6 +89,9 @@ export function ProfileForm({ profile: p, persisted, onChange, onPersist }: Prop
           })}
         </div>
       </fieldset>
+      <div className="search-bar">
+        <button className="btn primary search-btn" onClick={onSearch}>🔍 내 조건으로 맞춤 공고 검색</button>
+      </div>
       <p className="disclaimer">판정 기준값 확인일 {CRITERIA_AS_OF}. 소득·자산 기준은 매년 바뀌며 공고별로 다를 수 있습니다.</p>
     </div>
   );
