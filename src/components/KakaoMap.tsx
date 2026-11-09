@@ -48,6 +48,22 @@ export function KakaoMap({ notices, verdicts, selectedId, onSelect, onBoundsChan
   const map = useRef<any>(null);
   const clusterer = useRef<any>(null);
   const [error, setError] = useState<string | null>(KEY ? null : 'no-key');
+  // 마커 클릭 시 항상 최신 onSelect를 호출 (같은 마커 재클릭 = 닫기 토글)
+  const onSelectRef = useRef(onSelect);
+  onSelectRef.current = onSelect;
+
+  // 패널이 열리고 닫히며 지도 크기가 바뀌면 중심을 유지한 채 다시 그림
+  useEffect(() => {
+    if (!el.current || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => {
+      if (!map.current) return;
+      const c = map.current.getCenter();
+      map.current.relayout();
+      map.current.setCenter(c);
+    });
+    ro.observe(el.current);
+    return () => ro.disconnect();
+  }, []);
 
   useEffect(() => {
     if (!KEY || !el.current) return;
@@ -91,7 +107,7 @@ export function KakaoMap({ notices, verdicts, selectedId, onSelect, onBoundsChan
           // 위치 신뢰도가 낮은(시군구·시도 중심) 마커는 흐리게
           opacity: n.geoPrecision === 'address' ? 1 : 0.55,
         });
-        kakao.maps.event.addListener(mk, 'click', () => onSelect(n.id));
+        kakao.maps.event.addListener(mk, 'click', () => onSelectRef.current(n.id));
         return mk;
       });
     clusterer.current.addMarkers(markers);

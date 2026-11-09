@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Category, Notice, NoticeFile, Overrides, Profile, Verdict } from './types.ts';
 import { CATEGORY_LABEL } from './types.ts';
 import { bestVerdict, evaluate, matchScore } from './lib/eligibility.ts';
@@ -30,7 +30,11 @@ const isDesktop = () => typeof window !== 'undefined' && window.matchMedia('(min
 export default function App() {
   const [data, setData] = useState<NoticeFile | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [tab, setTab] = useState<Tab>('map');
+  // 데스크톱은 지도+오른쪽 패널, 모바일은 탭 전환
+  const desktop = useMemo(isDesktop, []);
+  const [tab, setTab] = useState<Tab>(desktop ? 'list' : 'map');
+  const [sideOpen, setSideOpen] = useState(true);
+  const detailOpenedSide = useRef(false); // 닫혀 있던 패널을 공고 상세가 연 경우
   // 공유·검색 유입용 딥링크: /?id=공고ID
   const [selectedId, setSelectedId] = useState<string | undefined>(() => new URLSearchParams(location.search).get('id') ?? undefined);
   const initial = useMemo(loadProfile, []);
@@ -114,7 +118,41 @@ export default function App() {
   useEffect(() => setLimit(PAGE), [listed.length]);
 
   const selected = notices.find((n) => n.id === selectedId);
-  const select = (id: string) => setSelectedId(id);
+  // 같은 공고(마커·카드)를 다시 누르면 닫힘. 데스크톱에서 패널이 닫혀 있었다면 다시 닫아 지도를 넓힌다
+  const selectedRef = useRef(selectedId);
+  selectedRef.current = selectedId;
+  const closeDetail = () => {
+    setSelectedId(undefined);
+    if (detailOpenedSide.current) {
+      setSideOpen(false);
+      detailOpenedSide.current = false;
+    }
+  };
+  const select = (id: string) => {
+    if (selectedRef.current === id) return closeDetail();
+    if (desktop && !sideOpen) {
+      detailOpenedSide.current = true;
+      setSideOpen(true);
+    }
+    setSelectedId(id);
+  };
+  // 탭: 데스크톱에서 '지도' 또는 이미 열린 탭을 다시 누르면 패널을 닫아 지도를 가득 채운다
+  const pickTab = (k: Tab) => {
+    if (!desktop) {
+      setTab(k);
+      setSelectedId(undefined);
+      return;
+    }
+    detailOpenedSide.current = false;
+    if (k === 'map' || (k === tab && sideOpen && !selectedId)) {
+      setSideOpen(false);
+      setSelectedId(undefined);
+      return;
+    }
+    setTab(k);
+    setSelectedId(undefined);
+    setSideOpen(true);
+  };
   const toggleSave = (id: string) => setSaved((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
 
   return (
@@ -154,12 +192,12 @@ export default function App() {
           {PRICE_BUCKETS.map((b) => <option key={b.key} value={b.key}>{b.label}</option>)}
         </select>
         <label className="check">
-          <input type="checkbox" checked={onlyMatch} onChange={(e) => { setOnlyMatch(e.target.checked); if (e.target.checked && !touched) setTab('me'); }} />
+          <input type="checkbox" checked={onlyMatch} onChange={(e) => { setOnlyMatch(e.target.checked); if (e.target.checked && !touched) pickTab('me'); }} />
           내 조건 매칭순
         </label>
       </div>
 
-      <main className={`body tab-${tab}`}>
+      <main className={`body tab-${tab} ${sideOpen ? 'side-open' : 'side-closed'}`}>
         <section className="pane-map">
           <KakaoMap notices={filtered} verdicts={verdicts} selectedId={selectedId} onSelect={select} onBoundsChange={setBounds} />
         </section>
@@ -177,7 +215,7 @@ export default function App() {
           ) : (
             <div className="list">
               <MatchPanel notices={filtered} verdicts={verdicts} touched={touched} today={today}
-                onSelect={select} onEditProfile={() => setTab('me')} />
+                onSelect={select} onEditProfile={() => pickTab('me')} />
               <div className="list-head">
                 <span className="muted small">
                   공고 {listed.length.toLocaleString()}건
@@ -203,26 +241,31 @@ export default function App() {
                   조건에 맞는 공고가 없습니다.{syncMap && bounds && filtered.length > 0 && ' 지도를 축소하거나 "지도 영역만"을 꺼보세요.'}
                 </p>
               )}
-              <footer className="site-foot muted small">
-                <a href={`${import.meta.env.BASE_URL}privacy.html`}>개인정보처리방침</a> · <a href={`${import.meta.env.BASE_URL}terms.html`}>이용약관</a>
-                <div>출처: {data?.sources.join(', ')}</div>
-              </footer>
+              <footer className="site-foot muted small">출처: {data?.sources.join(', ')}</footer>
             </div>
           )}
         </section>
 
         {selected && (
           <NoticeDetail notice={selected} profile={profile} hasProfile={touched} today={today}
-            saved={saved.includes(selected.id)} onToggleSave={() => toggleSave(selected.id)} onClose={() => setSelectedId(undefined)}
-            onEditProfile={() => { setSelectedId(undefined); setTab('me'); }} />
+            saved={saved.includes(selected.id)} onToggleSave={() => toggleSave(selected.id)} onClose={closeDetail}
+            onEditProfile={() => pickTab('me')} />
         )}
       </main>
 
       <nav className="tabs" aria-label="화면 전환">
         {([['map', '🗺️', '지도'], ['list', '📋', '공고'], ['agenda', '📅', '일정'], ['me', '👤', '내 조건']] as const).map(([k, ic, label]) => (
-          <button key={k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}><span>{ic}</span>{label}</button>
+          <button key={k} className={(desktop ? (k === 'map' ? !sideOpen : sideOpen && tab === k) : tab === k) ? 'on' : ''}
+            aria-pressed={desktop ? (k === 'map' ? !sideOpen : sideOpen && tab === k) : tab === k} onClick={() => pickTab(k)}>
+            <span>{ic}</span>{label}
+          </button>
         ))}
       </nav>
+
+      <footer className="app-foot">
+        <span>© 2026 Taezzi · Built Nov 2026<span className="foot-long"> · Data: Applyhome (REB), LH, Seoul Housing Portal</span></span>
+        <span><span className="foot-long">For reference only — verify with official notices · </span><a href={`${import.meta.env.BASE_URL}privacy`}>Privacy</a> · <a href={`${import.meta.env.BASE_URL}terms`}>Terms</a></span>
+      </footer>
     </div>
   );
 }
