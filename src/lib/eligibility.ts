@@ -1,14 +1,6 @@
 import type { Notice, Profile, ProgramResult, Verdict } from '../types.ts';
-import {
-  CAPITAL_AREA,
-  INCOME_LIMITS,
-  NEWLYWED_YEARS,
-  PRIVATE_LOTTERY_REALESTATE_MAX,
-  PUBLIC_ASSET,
-  depositRequired,
-  income100,
-  rank1Months,
-} from '../config/criteria.ts';
+import type { Criteria } from '../config/criteria.ts';
+import { CAPITAL_AREA, criteriaFor, depositRequired, income100, rank1Months } from '../config/criteria.ts';
 
 // 판정 규칙: 하나라도 명확히 불충족 → 'no', 입력 부족·공고별 상이 → 'check', 모두 충족 → 'likely'
 class Check {
@@ -42,13 +34,16 @@ function marriageYears(p: Profile, today = new Date()): number | undefined {
   return (today.getTime() - d.getTime()) / (365.25 * 24 * 3600 * 1000);
 }
 
-function incomePct(p: Profile): number | undefined {
+function incomePct(p: Profile, cr: Criteria): number | undefined {
   if (!p.monthlyIncome && p.monthlyIncome !== 0) return undefined;
-  return (p.monthlyIncome / income100(p.householdSize)) * 100;
+  return (p.monthlyIncome / income100(p.householdSize, cr)) * 100;
 }
 
+// 현재 판정 중인 공고의 기준 버전 (evaluate 진입 시 설정)
+let CR: Criteria = criteriaFor();
+
 function checkIncome(c: Check, p: Profile, limit: { single: number; dual: number }, name: string) {
-  const pct = incomePct(p);
+  const pct = incomePct(p, CR);
   const lim = p.dualIncome ? limit.dual : limit.single;
   if (pct === undefined) return c.warn(`${name} 소득 기준(${lim}% 이하) — 소득을 입력하세요`);
   if (pct <= lim) c.ok(`소득 ${pct.toFixed(0)}% ≤ ${lim}%`);
@@ -57,9 +52,10 @@ function checkIncome(c: Check, p: Profile, limit: { single: number; dual: number
 }
 
 function checkPublicAssets(c: Check, p: Profile) {
-  if (p.netAssets > PUBLIC_ASSET.netAssetsMax) c.fail(`순자산 ${p.netAssets.toLocaleString()}만원 > ${PUBLIC_ASSET.netAssetsMax.toLocaleString()}만원`);
+  const a = CR.publicAsset;
+  if (p.netAssets > a.netAssetsMax) c.fail(`순자산 ${p.netAssets.toLocaleString()}만원 > ${a.netAssetsMax.toLocaleString()}만원`);
   else c.ok('순자산 기준 이내');
-  if (p.carValue > PUBLIC_ASSET.carMax) c.fail(`자동차 ${p.carValue.toLocaleString()}만원 > ${PUBLIC_ASSET.carMax.toLocaleString()}만원`);
+  if (p.carValue > a.carMax) c.fail(`자동차 ${p.carValue.toLocaleString()}만원 > ${a.carMax.toLocaleString()}만원`);
   else c.ok('자동차 기준 이내');
 }
 
@@ -100,7 +96,8 @@ function residency(c: Check, p: Profile, n: Notice) {
   else c.warn(`공급지역(${n.region})과 거주지(${p.region}) 다름 — 기타지역 접수 가능 여부 공고문 확인`);
 }
 
-export function evaluate(n: Notice, p: Profile, today = new Date()): ProgramResult[] {
+export function evaluate(n: Notice, p: Profile, today = new Date(), versions?: Criteria[]): ProgramResult[] {
+  CR = criteriaFor(n.dates.announce, versions);
   const out: ProgramResult[] = [];
   const age = ageOf(p, today);
   const adult = age === undefined || age >= 19;
@@ -166,7 +163,7 @@ export function evaluate(n: Notice, p: Profile, today = new Date()): ProgramResu
 
   // ===== APT (민영 / 국민) =====
   const isPublic = n.subType === '국민';
-  const lim = isPublic ? INCOME_LIMITS.public : INCOME_LIMITS.private;
+  const lim = isPublic ? CR.incomeLimits.public : CR.incomeLimits.private;
 
   // 일반공급 1순위
   {
@@ -187,10 +184,10 @@ export function evaluate(n: Notice, p: Profile, today = new Date()): ProgramResu
       checkHomeless(c, p);
       if (p.marital === 'engaged') c.warn('예비신혼부부 — 입주 전 혼인신고 필요');
       else if (yrs === undefined) c.warn('혼인일을 입력하세요');
-      else if (yrs <= NEWLYWED_YEARS) c.ok(`혼인 ${yrs.toFixed(1)}년 (7년 이내)`);
-      else c.fail(`혼인 ${yrs.toFixed(1)}년 > 7년`);
+      else if (yrs <= CR.newlywedYears) c.ok(`혼인 ${yrs.toFixed(1)}년 (${CR.newlywedYears}년 이내)`);
+      else c.fail(`혼인 ${yrs.toFixed(1)}년 > ${CR.newlywedYears}년`);
       const passed = checkIncome(c, p, lim.newlywed, '신혼부부');
-      if (!isPublic && passed === false && p.realEstate <= PRIVATE_LOTTERY_REALESTATE_MAX) {
+      if (!isPublic && passed === false && p.realEstate <= CR.privateLotteryRealEstateMax) {
         // 소득 초과지만 부동산 기준 충족 → 추첨 물량
         c.reasons = c.reasons.map((r) => (r.includes('신혼부부') && r.startsWith('✗') ? r.replace('✗', '△') + ' → 추첨물량 가능' : r));
         c.verdict = c.reasons.some((r) => r.startsWith('✗')) ? 'no' : 'check';
@@ -213,7 +210,7 @@ export function evaluate(n: Notice, p: Profile, today = new Date()): ProgramResu
     }
     c.warn('5년 이상 소득세 납부 이력 필요');
     const passed = checkIncome(c, p, lim.firstLife, '생애최초');
-    if (!isPublic && passed === false && p.realEstate <= PRIVATE_LOTTERY_REALESTATE_MAX) {
+    if (!isPublic && passed === false && p.realEstate <= CR.privateLotteryRealEstateMax) {
       c.reasons = c.reasons.map((r) => (r.includes('생애최초') && r.startsWith('✗') ? r.replace('✗', '△') + ' → 추첨물량 가능' : r));
       c.verdict = c.reasons.some((r) => r.startsWith('✗')) ? 'no' : 'check';
     }
@@ -227,7 +224,7 @@ export function evaluate(n: Notice, p: Profile, today = new Date()): ProgramResu
     checkHomeless(c, p);
     c.ok(`미성년 자녀 ${p.children}명 (2명 이상)`);
     if (isPublic) {
-      checkIncome(c, p, INCOME_LIMITS.public.multiChild, '다자녀');
+      checkIncome(c, p, CR.incomeLimits.public.multiChild, '다자녀');
       checkPublicAssets(c, p);
     }
     out.push(c.result('multiChild', '다자녀 특별공급'));
@@ -239,7 +236,7 @@ export function evaluate(n: Notice, p: Profile, today = new Date()): ProgramResu
     checkHomeless(c, p);
     c.ok('2세 미만 자녀(임신 포함)');
     if (isPublic) {
-      checkIncome(c, p, INCOME_LIMITS.public.newborn, '신생아');
+      checkIncome(c, p, CR.incomeLimits.public.newborn, '신생아');
       checkPublicAssets(c, p);
     } else {
       c.warn('민영은 신혼부부·생애최초 물량 내 신생아 우선공급');
@@ -255,7 +252,7 @@ export function evaluate(n: Notice, p: Profile, today = new Date()): ProgramResu
     else c.ok('세대주');
     rank1(c, p, n, isPublic);
     if (isPublic) {
-      checkIncome(c, p, INCOME_LIMITS.public.oldParents, '노부모부양');
+      checkIncome(c, p, CR.incomeLimits.public.oldParents, '노부모부양');
       checkPublicAssets(c, p);
     }
     out.push(c.result('oldParents', '노부모부양 특별공급'));
@@ -266,7 +263,7 @@ export function evaluate(n: Notice, p: Profile, today = new Date()): ProgramResu
     const c = new Check();
     checkHomeless(c, p);
     c.ok(`만 ${age}세 미혼`);
-    checkIncome(c, p, INCOME_LIMITS.public.youth, '청년');
+    checkIncome(c, p, CR.incomeLimits.public.youth, '청년');
     c.warn('청년 특별공급 자산 기준은 공고문 확인');
     out.push(c.result('youth', '청년 특별공급'));
   }

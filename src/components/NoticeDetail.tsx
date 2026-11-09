@@ -5,7 +5,12 @@ import { evaluate } from '../lib/eligibility.ts';
 import { buildChecklist } from '../lib/checklist.ts';
 import { buildIcs, dday, eventsOf } from '../lib/schedule.ts';
 
-const VERDICT_LABEL = { likely: '가능성 높음', check: '확인 필요', no: '어려움' } as const;
+const VERDICT_LABEL = { likely: '조건 충족', check: '추가 확인', no: '조건 불충족' } as const;
+const FIELD_LABEL: Record<string, string> = {
+  announce: '모집공고', specialStart: '특공 접수 시작', specialEnd: '특공 접수 종료', rank1Start: '1순위 시작', rank1End: '1순위 종료',
+  rank2Start: '2순위 시작', rank2End: '2순위 종료', receiptStart: '접수 시작', receiptEnd: '접수 마감', winner: '당첨자 발표',
+  contractStart: '계약 시작', contractEnd: '계약 종료',
+};
 const SB_LABEL: Record<string, string> = {
   newlywed: '신혼', firstLife: '생애최초', multiChild: '다자녀', oldParents: '노부모', youth: '청년', newborn: '신생아', institution: '기관추천', etc: '기타',
 };
@@ -66,6 +71,8 @@ export function NoticeDetail({ notice: n, profile, hasProfile, today, saved, onT
             {n.flags?.speculative && <span className="tag warn">투기과열</span>}
             {n.flags?.adjusted && <span className="tag warn">조정대상</span>}
             {n.flags?.priceCap && <span className="tag soft">분양가상한제</span>}
+            {n.corrected && <span className="tag warn">정정</span>}
+            {n.removedAt && <span className="tag danger">취소·삭제 의심</span>}
           </div>
           <h2>{n.name}</h2>
           <p className="muted">{n.address ?? n.region}{n.totalUnits ? ` · ${n.totalUnits.toLocaleString()}세대` : ''}</p>
@@ -77,6 +84,20 @@ export function NoticeDetail({ notice: n, profile, hasProfile, today, saved, onT
         <button className="btn" onClick={() => downloadIcs([n])}>📅 캘린더 알림 추가</button>
         {n.url && <a className="btn" href={n.url} target="_blank" rel="noreferrer">공고 원문 ↗</a>}
       </div>
+
+      {n.removedAt && (
+        <p className="alert">{n.removedAt}에 공고 출처 목록에서 사라졌습니다. 취소·철회되었을 수 있으니 공고 원문을 확인하세요.</p>
+      )}
+      {!!n.changes?.length && (
+        <section>
+          <h3>일정 변경 이력</h3>
+          <ul className="changes">
+            {n.changes.map((c, i) => (
+              <li key={i}><span className="muted">{c.at} 감지</span> {FIELD_LABEL[c.field] ?? c.field}: <s>{c.from}</s> → <b>{c.to ?? '삭제'}</b></li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <section>
         <h3>일정</h3>
@@ -96,7 +117,7 @@ export function NoticeDetail({ notice: n, profile, hasProfile, today, saved, onT
       </section>
 
       <section>
-        <h3>내 자격 판정</h3>
+        <h3>내 자격 판정 <span className="beta-tag">베타</span></h3>
         {!hasProfile ? (
           <div className="cta">
             <p>나이·통장·소득 등을 입력하면 이 공고에 지원 가능한지 유형별로 알려드려요.</p>
@@ -138,7 +159,12 @@ export function NoticeDetail({ notice: n, profile, hasProfile, today, saved, onT
       )}
 
       <section>
-        <h3>제출 서류 체크리스트 <small className="muted">{checklist.filter((c) => done[c.id]).length}/{checklist.length}</small></h3>
+        <h3>서류 준비 일반 안내 <small className="muted">{checklist.filter((c) => done[c.id]).length}/{checklist.length}</small></h3>
+        <p className="disclaimer">
+          아래는 지원 유형별로 <b>일반적으로</b> 요구되는 서류입니다. 제출 서류·발급 기준일·원본 여부는 공고마다 다르므로,
+          반드시 공고문의 「당첨자 제출서류」 항목으로 확정하세요.
+          {n.url && <> <a href={n.url} target="_blank" rel="noreferrer">공고 원문에서 제출서류 확인 ↗</a></>}
+        </p>
         <ul className="checklist">
           {checklist.map((c) => (
             <li key={c.id}>
@@ -156,7 +182,9 @@ export function NoticeDetail({ notice: n, profile, hasProfile, today, saved, onT
         {n.developer && <div>시행: {n.developer}</div>}
         {n.phone && <div>문의: <a href={`tel:${n.phone}`}>{n.phone}</a></div>}
         {n.moveIn && <div>입주예정: {n.moveIn.slice(0, 4)}.{n.moveIn.slice(4, 6)}</div>}
-        {n.geoPrecision === 'region' && <div>※ 지도 위치는 지역 중심 근사값입니다.</div>}
+        {n.geoPrecision === 'region' && <div>※ 지도 위치는 시·도 중심 근사값입니다 (정확한 주소 미제공).</div>}
+        {n.geoPrecision === 'district' && <div>※ 지도 위치는 시·군·구 또는 동 단위 근사값입니다.</div>}
+        {n.firstSeen && <div>최초 수집: {n.firstSeen}</div>}
       </section>
     </aside>
   );

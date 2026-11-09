@@ -179,3 +179,41 @@ fieldset input, fieldset select { width: 100%; }
 
 .cta { background: var(--brand-soft); border-radius: var(--radius); padding: 12px; }
 .cta p { margin: 0 0 8px; font-size: 14px; }
+
+/* ---- v0.2: 베타 표기, 맞춤 패널, 상태 태그, 레이아웃(지도 70 : 목록 30) ---- */
+.beta-tag { font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 999px; background: #ede9fe; color: #6d28d9; vertical-align: middle; margin-left: 4px; }
+@media (prefers-color-scheme: dark) { .beta-tag { background: #2e1065; color: #c4b5fd; } }
+.tag.danger { background: #fee2e2; color: #b91c1c; }
+.tag.st-open { background: var(--ok-soft); color: var(--ok); }
+.tag.st-upcoming { background: #dbeafe; color: #1d4ed8; }
+.tag.st-closed { background: var(--no-soft); color: var(--muted); }
+.tag.st-unknown { background: var(--no-soft); color: var(--muted); }
+@media (prefers-color-scheme: dark) { .tag.danger { background: #450a0a; color: #fca5a5; } .tag.st-upcoming { background: #172554; color: #93c5fd; } }
+.alert { background: #fee2e2; color: #b91c1c; padding: 8px 10px; border-radius: 8px; font-size: 13px; }
+.changes { list-style: none; padding: 0; margin: 0; font-size: 13px; display: flex; flex-direction: column; gap: 4px; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; }
+.panel.cta { background: var(--brand-soft); border: none; }
+.panel.cta p { margin: 4px 0 8px; }
+.panel-head { display: flex; align-items: center; gap: 4px; margin-bottom: 8px; }
+.counts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.count { display: flex; flex-direction: column; align-items: center; padding: 8px 4px; border-radius: 10px; font-size: 12px; }
+.count b { font-size: 20px; line-height: 1.2; }
+.count.likely { background: var(--ok-soft); color: var(--ok); }
+.count.check { background: var(--warn-soft); color: var(--warn); }
+.count.no { background: var(--no-soft); color: var(--no); }
+.soon { margin-top: 10px; }
+.soon ul { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+.soon em { font-style: normal; font-weight: 700; color: #dc2626; margin-right: 4px; }
+.list-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 4px; }
+.btn.more { width: 100%; }
+.empty { text-align: center; padding: 24px 0; }
+.site-foot { margin-top: 16px; text-align: center; display: flex; flex-direction: column; gap: 4px; }
+
+/* 데스크톱: 왼쪽 지도 70 : 오른쪽 목록 30 (A3) */
+@media (min-width: 900px) {
+  .body { grid-template-columns: minmax(0, 7fr) minmax(360px, 3fr); }
+  .pane-map { grid-column: 1; grid-row: 1; }
+  .pane-side { grid-column: 2; grid-row: 1; border-right: none; border-left: 1px solid var(--line); }
+  .detail { right: 0; left: auto; width: min(460px, 100%); }
+  .filters { flex-wrap: wrap; }
+}

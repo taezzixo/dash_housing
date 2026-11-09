@@ -1,8 +1,8 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-// GitHub Pages: https://taezzixo.github.io/dash_housing/
+// Cloudflare Pages(루트 도메인) 기준. 하위 경로에 배포할 때만 BASE_PATH 지정.
 export default defineConfig({
   plugins: [react()],
-  base: process.env.BASE_PATH ?? '/dash_housing/',
+  base: process.env.BASE_PATH ?? '/',
 });

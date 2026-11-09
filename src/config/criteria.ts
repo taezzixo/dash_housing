@@ -1,22 +1,70 @@
-// 청약 자격 판정 기준값
+// 청약 자격 판정 기준값 — 버전 관리
 // ⚠️ 매년 바뀌는 값입니다. 판정은 "가능성" 안내용이며 최종 자격은 반드시 입주자모집공고문으로 확인해야 합니다.
-// 값 확인일: 2026-11-08 (출처: 청약홈·LH 공고문 인용 자료 교차 확인, 공고별 상이할 수 있음)
+//
+// 공고의 모집공고일(announce)에 맞는 버전을 자동 선택합니다 (criteriaFor).
+// 기준이 바뀌면 CRITERIA_VERSIONS 맨 앞에 새 버전을 추가하세요. 기존 버전은 지우지 않습니다
+// (진행 중인 과거 공고는 과거 기준으로 판정해야 하므로).
 
-export const CRITERIA_AS_OF = '2026-11-08';
+export interface Criteria {
+  id: string;
+  effectiveFrom: string; // 이 날짜 이후 모집공고에 적용 (YYYY-MM-DD)
+  checkedAt: string; // 값 확인일
+  source: string;
+  // 전년도 도시근로자 가구원수별 가구당 월평균소득 100% (만원). 6인 이상은 5인 값 사용(보수적).
+  monthlyIncome100: Record<1 | 2 | 3 | 4 | 5, number>;
+  incomeLimits: {
+    private: { newlywed: Limit; firstLife: Limit };
+    public: { newlywed: Limit; firstLife: Limit; newborn: Limit; multiChild: Limit; oldParents: Limit; youth: Limit };
+  };
+  privateLotteryRealEstateMax: number; // 민영 소득초과 추첨물량 부동산 기준(만원)
+  publicAsset: { netAssetsMax: number; carMax: number }; // 공공 자산 기준(만원)
+  newlywedYears: number;
+}
+export interface Limit {
+  single: number;
+  dual: number;
+}
 
-// 전년도 도시근로자 가구원수별 가구당 월평균소득 100% (만원)
-// 2025년도 값 (2026년 공고에 주로 적용). 6인 이상은 공고문 확인 필요 → 5인 값 사용(보수적).
-export const MONTHLY_INCOME_100: Record<number, number> = {
-  1: 816.8, // 3인 이하 동일 적용(민영 특공 기준)
-  2: 816.8,
-  3: 816.8,
-  4: 880.2,
-  5: 932.7,
-};
+export const CRITERIA_VERSIONS: Criteria[] = [
+  {
+    id: '2025-income',
+    effectiveFrom: '2025-01-01',
+    checkedAt: '2026-11-08',
+    source: '청약홈·LH 공고문 인용 자료 교차 확인 (공고별 상이할 수 있음, 원문 확정 필요)',
+    monthlyIncome100: { 1: 816.8, 2: 816.8, 3: 816.8, 4: 880.2, 5: 932.7 },
+    incomeLimits: {
+      private: {
+        newlywed: { single: 140, dual: 160 },
+        firstLife: { single: 160, dual: 160 },
+      },
+      public: {
+        newlywed: { single: 130, dual: 200 },
+        firstLife: { single: 130, dual: 130 },
+        newborn: { single: 150, dual: 200 },
+        multiChild: { single: 120, dual: 120 },
+        oldParents: { single: 120, dual: 120 },
+        youth: { single: 140, dual: 140 },
+      },
+    },
+    privateLotteryRealEstateMax: 33100,
+    publicAsset: { netAssetsMax: 36100, carMax: 3803 },
+    newlywedYears: 7,
+  },
+];
 
-export function income100(householdSize: number): number {
-  const n = Math.max(1, Math.min(5, Math.round(householdSize)));
-  return MONTHLY_INCOME_100[n];
+/** 모집공고일 기준으로 적용할 기준 버전 선택 (없으면 최신) */
+export function criteriaFor(announce?: string, versions: Criteria[] = CRITERIA_VERSIONS): Criteria {
+  const sorted = [...versions].sort((a, b) => b.effectiveFrom.localeCompare(a.effectiveFrom));
+  if (!announce) return sorted[0];
+  return sorted.find((v) => v.effectiveFrom <= announce) ?? sorted[sorted.length - 1];
+}
+
+export const LATEST = criteriaFor();
+export const CRITERIA_AS_OF = LATEST.checkedAt;
+
+export function income100(householdSize: number, c: Criteria = LATEST): number {
+  const n = Math.max(1, Math.min(5, Math.round(householdSize))) as 1 | 2 | 3 | 4 | 5;
+  return c.monthlyIncome100[n];
 }
 
 export const CAPITAL_AREA = ['서울', '경기', '인천'];
@@ -49,31 +97,3 @@ export function rank1Months(noticeRegion: string | undefined, speculativeOrAdjus
   if (noticeRegion && CAPITAL_AREA.includes(noticeRegion)) return 12;
   return 6;
 }
-
-// 특별공급 소득 기준 (도시근로자 월평균소득 대비 %)
-export const INCOME_LIMITS = {
-  private: {
-    newlywed: { single: 140, dual: 160 }, // 우선 100/120, 일반 140/160
-    firstLife: { single: 160, dual: 160 }, // 우선 130, 일반 160
-  },
-  public: {
-    newlywed: { single: 130, dual: 200 },
-    firstLife: { single: 130, dual: 130 },
-    newborn: { single: 150, dual: 200 },
-    multiChild: { single: 120, dual: 120 },
-    oldParents: { single: 120, dual: 120 },
-    youth: { single: 140, dual: 140 },
-  },
-};
-
-// 소득 기준 초과 시 민영 추첨 물량 부동산 자산 기준 (만원)
-export const PRIVATE_LOTTERY_REALESTATE_MAX = 33100;
-
-// 공공(국민주택) 자산 기준 (만원)
-export const PUBLIC_ASSET = {
-  netAssetsMax: 36100,
-  carMax: 3803,
-};
-
-// 신혼부부 혼인기간(년)
-export const NEWLYWED_YEARS = 7;

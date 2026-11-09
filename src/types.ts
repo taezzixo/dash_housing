@@ -61,7 +61,7 @@ export interface Notice {
   region?: string; // 공급지역명 (서울, 경기 ...)
   lat?: number;
   lng?: number;
-  geoPrecision?: 'address' | 'region';
+  geoPrecision?: 'address' | 'district' | 'region'; // 위치 신뢰도: 주소/시군구/시도
   totalUnits?: number;
   dates: NoticeDates;
   flags?: {
@@ -78,6 +78,17 @@ export interface Notice {
   developer?: string;
   moveIn?: string; // 입주예정월 YYYYMM
   status?: string; // LH 공고상태
+  corrected?: boolean; // 정정 공고
+  firstSeen?: string; // 최초 수집일 (YYYY-MM-DD)
+  changes?: NoticeChange[]; // 수집 간 일정 변경 이력
+  removedAt?: string; // 진행 중이던 공고가 출처에서 사라진 날 (취소·삭제 의심)
+}
+
+export interface NoticeChange {
+  at: string; // 감지일
+  field: keyof NoticeDates;
+  from?: string;
+  to?: string;
 }
 
 export interface NoticeFile {

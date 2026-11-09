@@ -9,7 +9,7 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "fetch:data": "node scripts/fetch-notices.mjs",
-    "test": "node --experimental-strip-types --test src/lib/*.test.ts"
+    "test": "node --experimental-strip-types --test src/lib/*.test.ts scripts/lib/*.test.mjs"
   },
   "dependencies": {
     "react": "18.3.1",

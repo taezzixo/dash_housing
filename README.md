@@ -14,29 +14,34 @@
 ## 아키텍처 (서버·DB 없음)
 ```
 GitHub Actions (매일 06:17 KST)
-  ├─ 청약홈 API (api.odcloud.kr) ─┐
-  ├─ LH 공고 API (apis.data.go.kr) ┼─▶ scripts/fetch-notices.mjs ─▶ 정규화 + 카카오 지오코딩(캐시)
-  └─────────────────────────────────┘                                   │
-                                                          public/data/notices.json
-                                                                        │
-                                              Vite 빌드 ─▶ GitHub Pages (정적 사이트)
-                                                                        │
-                                브라우저: 카카오맵 · 자격판정 · 체크리스트 · .ics (모두 클라이언트)
+  청약홈 API · LH 공고 API ─▶ scripts/fetch-notices.mjs
+      ─▶ 정규화 · LH 주택만 필터 · 카카오 지오코딩(캐시, 위치 신뢰도)
+      ─▶ 직전 데이터와 비교 (일정 변경 · 정정 · 취소 의심 추적)
+      ─▶ public/data/notices.json 커밋
+                      │ (main 푸시)
+                      ▼
+Cloudflare Pages 자동 빌드·배포 (무료, 상업 이용 가능)
+                      │
+브라우저: 카카오맵 · 자격판정(기준 버전 관리) · 서류 안내 · .ics  ← 모두 클라이언트
 ```
 
-## 설정 (최초 1회)
-1. **공공데이터포털 키:** [공공데이터포털](https://www.data.go.kr)에서 아래 두 API를 활용신청하고 인증키를 받습니다. 둘 다 자동승인입니다.
-   - 한국부동산원_청약홈 분양정보 조회 서비스 (15098547)
-   - 한국토지주택공사_분양임대공고문 조회 서비스 (15058530)
-2. **카카오 키:** [카카오 개발자센터](https://developers.kakao.com)에서 앱을 만들고 다음을 설정합니다.
-   - JavaScript 키를 발급받고, 플랫폼 → Web에 `https://taezzixo.github.io`를 등록합니다.
-   - REST API 키를 발급받습니다. 주소를 좌표로 바꾸는 데 씁니다.
-3. **GitHub Secrets 등록:** GitHub 저장소 → Settings → Secrets and variables → Actions에 다음 이름으로 등록합니다.
-   - `DATA_GO_KR_KEY`
-   - `KAKAO_REST_KEY`
-   - `KAKAO_JS_KEY`
-4. **Pages 켜기:** GitHub 저장소 → Settings → Pages → Source를 **GitHub Actions**로 바꿉니다.
-5. **실행:** Actions → "공고 수집 및 배포" → Run workflow를 누릅니다. 배포되면 https://taezzixo.github.io/dash_housing/ 에서 볼 수 있습니다.
+## 설정
+1. **GitHub Secrets** (완료): `DATA_GO_KR_KEY`, `KAKAO_REST_KEY`, `KAKAO_JS_KEY`
+2. **Cloudflare Pages 연결**
+   - Cloudflare 대시보드 → Workers & Pages → Create → Pages → **Connect to Git**에서 `taezzixo/dash_housing`를 고릅니다.
+   - Framework preset: `None`
+   - Build command: `npm run build`
+   - Build output directory: `dist`
+   - 환경 변수(Production)는 두 개를 넣습니다.
+     - `VITE_KAKAO_JS_KEY` = 카카오 JavaScript 키
+     - `NODE_VERSION` = `22`
+3. **카카오 도메인 등록**: 카카오 개발자센터 → 앱 → 플랫폼 → Web에 배포 주소를 등록합니다.
+   - 기본 주소: `https://<프로젝트>.pages.dev`
+   - 도메인을 구매하면 그 주소도 추가합니다.
+4. **첫 수집**: GitHub → Actions → "공고 수집" → Run workflow를 누릅니다. 이후에는 매일 자동으로 실행됩니다.
+
+## 판정 기준 버전 관리
+`src/config/criteria.ts`의 `CRITERIA_VERSIONS`에 기준이 바뀔 때마다 새 버전을 **추가**합니다. 각 공고는 모집공고일에 맞는 버전으로 판정합니다.
 
 ## 로컬 개발
 ```bash
@@ -45,8 +50,6 @@ node scripts/make-sample.mjs
 npm run dev
 ```
 - `node scripts/make-sample.mjs`는 키가 없을 때 쓰는 샘플 데이터를 만듭니다.
+- 프록시 환경에서 수집할 때는 `NODE_USE_ENV_PROXY=1`을 지정하세요.
 - 실제 데이터로 개발하려면 `DATA_GO_KR_KEY=... npm run fetch:data`를 실행하세요.
 - 테스트는 `npm test`로 실행합니다. 자격판정 규칙을 검사합니다.
-
-## 판정 기준 업데이트
-소득·자산 기준값은 `src/config/criteria.ts`에 모여 있습니다. 매년 도시근로자 월평균소득이 발표되면 이 파일만 고치면 됩니다. 판정 결과는 참고용 안내이며, 최종 자격은 공고문에서 확인해야 합니다.

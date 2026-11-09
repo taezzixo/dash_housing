@@ -5,6 +5,8 @@
 
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
+import { geoCandidates } from './lib/geo.mjs';
+import { trackChanges } from './lib/track.mjs';
 
 const KEY = process.env.DATA_GO_KR_KEY;
 const KAKAO = process.env.KAKAO_REST_KEY;
@@ -44,8 +46,9 @@ const APPLYHOME = [
   { cat: 'APT', detail: 'getAPTLttotPblancDetail', model: 'getAPTLttotPblancMdl' },
   { cat: 'OFFICETEL', detail: 'getUrbtyOfctlLttotPblancDetail', model: 'getUrbtyOfctlLttotPblancMdl' },
   { cat: 'REMNDR', detail: 'getRemndrLttotPblancDetail', model: 'getRemndrLttotPblancMdl' },
-  { cat: 'PBL_PVT_RENT', detail: 'getPblPvtRentLttotPblancDetail', model: 'getPblPvtRentLttotPblancMdl' },
-  { cat: 'OPT', detail: 'getOPTLttotPblancDetail', model: 'getOPTLttotPblancMdl' },
+  // 아래 두 API는 모집공고일이 YYYYMMDD 형식이라 조건값도 같은 형식으로 보내야 한다
+  { cat: 'PBL_PVT_RENT', detail: 'getPblPvtRentLttotPblancDetail', model: 'getPblPvtRentLttotPblancMdl', compactDate: true },
+  { cat: 'OPT', detail: 'getOPTLttotPblancDetail', model: 'getOPTLttotPblancMdl', compactDate: true },
 ];
 
 async function odcAll(op, conds = {}) {
@@ -138,10 +141,13 @@ function normModel(m) {
 async function fetchApplyhome() {
   const out = [];
   for (const api of APPLYHOME) {
-    const rows = await odcAll(api.detail, { 'cond[RCRIT_PBLANC_DE::GTE]': ymd(since) });
-    console.log(`청약홈 ${api.cat}: ${rows.length}건`);
+    const from = api.compactDate ? ymd(since).replaceAll('-', '') : ymd(since);
+    const rows = await odcAll(api.detail, { 'cond[RCRIT_PBLANC_DE::GTE]': from });
+    let kept = 0;
     for (const r of rows) {
       const n = normApplyhome(api.cat, r);
+      if ((n.dates.announce ?? '9999') < ymd(since)) continue; // 형식 차이 대비 이중 확인
+      kept++;
       try {
         const ms = await odcAll(api.model, {
           'cond[HOUSE_MANAGE_NO::EQ]': n._key.HOUSE_MANAGE_NO,
@@ -155,6 +161,7 @@ async function fetchApplyhome() {
       out.push(n);
       await sleep(80);
     }
+    console.log(`청약홈 ${api.cat}: ${kept}건`);
   }
   return out;
 }
@@ -164,12 +171,15 @@ async function fetchLH() {
   const fmt = (x) => ymd(x).replaceAll('-', '.');
   const end = new Date(today.getTime() + 120 * 86400e3);
   const out = [];
+  let seen = 0;
   for (let page = 1; page < 30; page++) {
     const q = new URLSearchParams({ PG_SZ: '100', PAGE: String(page), PAN_NT_ST_DT: fmt(since), CLSG_DT: fmt(end) });
     const j = await getJson(`https://apis.data.go.kr/B552555/lhLeaseNoticeInfo1/lhLeaseNoticeInfo1?serviceKey=${serviceKey}&${q}`);
     // 응답: [ {dsSch:[...]}, {resHeader:[...], dsList:[...]} ]
     const list = (Array.isArray(j) ? j : [j]).flatMap((b) => b.dsList ?? []);
     for (const r of list) {
+      // 주택만: 05 분양주택, 06 임대주택, 13 주거복지(매입임대 등), 39 공공분양(신혼희망). 토지(01)·상가(22)·어린이집(40) 제외
+      if (!LH_HOUSING.has(r.UPP_AIS_TP_CD) || r.AIS_TP_CD === '40') continue;
       out.push({
         id: `lh-${r.PAN_ID ?? r.DTL_URL?.match(/PAN_ID:(\d+)/)?.[1] ?? r.PAN_NM}`,
         source: 'lh',
@@ -180,14 +190,19 @@ async function fetchLH() {
         status: r.PAN_SS,
         dates: { announce: d(r.PAN_NT_ST_DT), receiptEnd: d(r.CLSG_DT) },
         url: r.DTL_URL,
+        // 공급정보·상세정보 API 호출용 키 (연동 대기)
+        lhKey: { PAN_ID: r.PAN_ID, SPL_INF_TP_CD: r.SPL_INF_TP_CD, CCR_CNNT_SYS_DS_CD: r.CCR_CNNT_SYS_DS_CD, UPP_AIS_TP_CD: r.UPP_AIS_TP_CD, AIS_TP_CD: r.AIS_TP_CD },
       });
     }
+    seen += list.length;
     const all = Number(list[0]?.ALL_CNT ?? 0);
-    if (!list.length || out.length >= all) break;
+    if (!list.length || seen >= all) break;
   }
   console.log(`LH: ${out.length}건`);
   return out;
 }
+
+const LH_HOUSING = new Set(['05', '06', '13', '39']);
 
 // ---------- 지역명 정규화 ----------
 const REGION_MAP = {
@@ -215,34 +230,40 @@ const REGION_CENTER = {
 async function geocode(notices) {
   const cache = existsSync(GEO_CACHE) ? JSON.parse(await readFile(GEO_CACHE, 'utf8')) : {};
   let calls = 0;
+  const stat = { address: 0, district: 0, region: 0, none: 0 };
   for (const n of notices) {
-    if (n.address) {
-      const addr = n.address.replace(/\s*\(.*?\)\s*/g, ' ').replace(/\s+(일원|일대|외\s*\d*\s*필지).*$/, '').trim();
-      if (!(addr in cache) && KAKAO) {
-        cache[addr] = await kakaoLookup(addr);
+    let hit = null;
+    for (const c of geoCandidates(n.address)) {
+      if (!(c.q in cache) && KAKAO) {
+        cache[c.q] = await kakaoLookup(c.q);
         calls++;
         await sleep(60);
       }
-      const hit = cache[addr];
-      if (hit) {
-        n.lat = hit[0];
-        n.lng = hit[1];
-        n.geoPrecision = 'address';
-        continue;
+      const r = cache[c.q];
+      if (r) {
+        // 카카오가 동/리 단위(REGION)로만 찾았으면 근사 위치
+        hit = { lat: r[0], lng: r[1], precision: c.precision === 'district' || r[2] === 'REGION' ? 'district' : 'address' };
+        break;
       }
     }
-    const c = REGION_CENTER[n.region];
-    if (c) {
-      // 같은 지역 마커가 겹치지 않도록 약간 흩뿌림 (id 기반 결정적)
-      const h = [...n.id].reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) >>> 0, 7);
-      n.lat = c[0] + (((h % 1000) / 1000) - 0.5) * 0.08;
-      n.lng = c[1] + ((((h >> 10) % 1000) / 1000) - 0.5) * 0.08;
-      n.geoPrecision = 'region';
+    if (!hit) {
+      const c = REGION_CENTER[n.region];
+      if (c) {
+        // 같은 지역 마커가 겹치지 않도록 약간 흩뿌림 (id 기반 결정적)
+        const h = [...n.id].reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) >>> 0, 7);
+        hit = { lat: c[0] + ((h % 1000) / 1000 - 0.5) * 0.08, lng: c[1] + (((h >> 10) % 1000) / 1000 - 0.5) * 0.08, precision: 'region' };
+      }
     }
+    if (hit) {
+      n.lat = hit.lat;
+      n.lng = hit.lng;
+      n.geoPrecision = hit.precision;
+      stat[hit.precision]++;
+    } else stat.none++;
   }
   await mkdir('data', { recursive: true });
-  await writeFile(GEO_CACHE, JSON.stringify(cache, null, 0));
-  console.log(`지오코딩: 신규 ${calls}건 조회${KAKAO ? '' : ' (KAKAO_REST_KEY 없음 → 지역 중심 좌표 사용)'}`);
+  await writeFile(GEO_CACHE, JSON.stringify(cache));
+  console.log(`지오코딩: 신규 조회 ${calls}건, 결과 ${JSON.stringify(stat)}${KAKAO ? '' : ' (KAKAO_REST_KEY 없음)'}`);
 }
 
 async function kakaoLookup(q) {
@@ -251,29 +272,31 @@ async function kakaoLookup(q) {
     let r = await fetch(`https://dapi.kakao.com/v2/local/search/address.json?query=${encodeURIComponent(q)}&size=1`, { headers: h });
     let j = await r.json();
     let doc = j.documents?.[0];
-    if (!doc) {
-      r = await fetch(`https://dapi.kakao.com/v2/local/search/keyword.json?query=${encodeURIComponent(q)}&size=1`, { headers: h });
-      j = await r.json();
-      doc = j.documents?.[0];
-    }
-    return doc ? [Number(doc.y), Number(doc.x)] : null;
+    if (doc) return [Number(doc.y), Number(doc.x), doc.address_type];
+    r = await fetch(`https://dapi.kakao.com/v2/local/search/keyword.json?query=${encodeURIComponent(q)}&size=1`, { headers: h });
+    j = await r.json();
+    doc = j.documents?.[0];
+    return doc ? [Number(doc.y), Number(doc.x), 'KEYWORD'] : null;
   } catch {
-    return null;
+    return undefined; // 네트워크 오류는 캐시하지 않음
   }
 }
 
 // ---------- main ----------
 const sources = [];
+const okSources = new Set();
 let notices = [];
 try {
   notices.push(...(await fetchApplyhome()));
   sources.push('청약홈(한국부동산원) 분양정보 조회 서비스');
+  okSources.add('applyhome');
 } catch (e) {
   console.error('청약홈 수집 실패:', e.message);
 }
 try {
   notices.push(...(await fetchLH()));
   sources.push('LH 분양임대공고문 조회 서비스');
+  okSources.add('lh');
 } catch (e) {
   console.error('LH 수집 실패:', e.message);
 }
@@ -284,6 +307,21 @@ if (!notices.length) {
 // 중복 제거
 notices = [...new Map(notices.map((n) => [n.id, n])).values()];
 await geocode(notices);
+
+// 정정·취소 추적: 직전 데이터와 비교 (샘플 데이터는 비교하지 않음)
+let prev = [];
+if (existsSync(OUT)) {
+  try {
+    const old = JSON.parse(await readFile(OUT, 'utf8'));
+    if (!old.sample) prev = old.notices ?? [];
+  } catch {
+    /* 첫 수집 */
+  }
+}
+notices = trackChanges(prev, notices, ymd(today), okSources);
+const changed = notices.filter((n) => n.changes?.some((c) => c.at === ymd(today))).length;
+const removed = notices.filter((n) => n.removedAt === ymd(today)).length;
+console.log(`변경 감지: 일정 변경 ${changed}건, 사라진 공고 ${removed}건`);
 notices.sort((a, b) => (b.dates.announce ?? '').localeCompare(a.dates.announce ?? ''));
 await mkdir('public/data', { recursive: true });
 await writeFile(OUT, JSON.stringify({ generatedAt: new Date().toISOString(), sample: false, sources, notices }));

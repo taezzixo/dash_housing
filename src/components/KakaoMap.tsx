@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Notice, Verdict } from '../types.ts';
+import type { Bounds } from '../lib/filters.ts';
 
 declare global {
   interface Window {
@@ -39,9 +40,10 @@ interface Props {
   verdicts: Map<string, Verdict>;
   selectedId?: string;
   onSelect: (id: string) => void;
+  onBoundsChange?: (b: Bounds) => void;
 }
 
-export function KakaoMap({ notices, verdicts, selectedId, onSelect }: Props) {
+export function KakaoMap({ notices, verdicts, selectedId, onSelect, onBoundsChange }: Props) {
   const el = useRef<HTMLDivElement>(null);
   const map = useRef<any>(null);
   const clusterer = useRef<any>(null);
@@ -56,6 +58,15 @@ export function KakaoMap({ notices, verdicts, selectedId, onSelect }: Props) {
         map.current = new kakao.maps.Map(el.current, { center: new kakao.maps.LatLng(36.4, 127.8), level: 13 });
         map.current.addControl(new kakao.maps.ZoomControl(), kakao.maps.ControlPosition.RIGHT);
         clusterer.current = new kakao.maps.MarkerClusterer({ map: map.current, averageCenter: true, minLevel: 9 });
+        // 지도 이동이 끝날 때마다 보이는 영역을 알려 목록과 연동 (D2)
+        const report = () => {
+          const b = map.current.getBounds();
+          const sw = b.getSouthWest();
+          const ne = b.getNorthEast();
+          onBoundsChange?.({ south: sw.getLat(), west: sw.getLng(), north: ne.getLat(), east: ne.getLng() });
+        };
+        kakao.maps.event.addListener(map.current, 'idle', report);
+        report();
         draw();
       })
       .catch((e) => setError(e.message));
@@ -77,6 +88,8 @@ export function KakaoMap({ notices, verdicts, selectedId, onSelect }: Props) {
           position: new kakao.maps.LatLng(n.lat, n.lng),
           title: n.name,
           image: new kakao.maps.MarkerImage(pinSvg(COLOR[v]), new kakao.maps.Size(28, 38), { offset: new kakao.maps.Point(14, 38) }),
+          // 위치 신뢰도가 낮은(시군구·시도 중심) 마커는 흐리게
+          opacity: n.geoPrecision === 'address' ? 1 : 0.55,
         });
         kakao.maps.event.addListener(mk, 'click', () => onSelect(n.id));
         return mk;
@@ -90,7 +103,7 @@ export function KakaoMap({ notices, verdicts, selectedId, onSelect }: Props) {
     const kakao = window.kakao;
     const n = notices.find((x) => x.id === selectedId);
     if (!kakao || !map.current || !n?.lat) return;
-    map.current.setLevel(n.geoPrecision === 'region' ? 9 : 5);
+    map.current.setLevel(n.geoPrecision === 'region' ? 10 : n.geoPrecision === 'district' ? 8 : 5);
     map.current.panTo(new kakao.maps.LatLng(n.lat, n.lng));
   }, [selectedId]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -108,9 +121,10 @@ export function KakaoMap({ notices, verdicts, selectedId, onSelect }: Props) {
       <div ref={el} className="map" />
       {error && <div className="map-error">{error}</div>}
       <div className="legend">
-        <span><i style={{ background: COLOR.likely }} />지원 가능성 높음</span>
-        <span><i style={{ background: COLOR.check }} />확인 필요</span>
-        <span><i style={{ background: COLOR.no }} />어려움</span>
+        <span><i style={{ background: COLOR.likely }} />조건 충족</span>
+        <span><i style={{ background: COLOR.check }} />추가 확인</span>
+        <span><i style={{ background: COLOR.no }} />불충족</span>
+        <span><i style={{ background: COLOR.none, opacity: 0.55 }} />위치 근사</span>
       </div>
     </div>
   );
