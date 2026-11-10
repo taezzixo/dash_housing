@@ -22,7 +22,7 @@
 ```bash
 npm install            # 의존성 설치
 npm run dev            # 개발 서버 (지도는 VITE_KAKAO_JS_KEY 필요)
-npm test               # 단위 테스트 (현재 40개, 모두 통과해야 함)
+npm test               # 단위 테스트 (현재 41개, 모두 통과해야 함)
 npm run build          # 타입 검사 + 빌드 + 공고별 SEO 페이지 생성
 npm run fetch:data     # 공고 수집 (DATA_GO_KR_KEY, KAKAO_REST_KEY 환경변수 필요)
 ```
@@ -30,8 +30,8 @@ npm run fetch:data     # 공고 수집 (DATA_GO_KR_KEY, KAKAO_REST_KEY 환경변
 
 ## 디렉터리
 - `src/App.tsx` — 메인 화면(필터, 탭, 목록, 상세 패널 연결)
-- `src/components/` — `KakaoMap.tsx`(지도·라벨·클러스터), `NoticeDetail.tsx`(공고 상세·가점 비교), `ProfileForm.tsx`(내 조건), `Account.tsx`(계정 저장), `Agenda.tsx`(일정: 월 캘린더·날짜별 목록), `SearchBox.tsx`(검색 드롭다운)
-- `src/lib/` — `eligibility.ts`(자격 판정), `filters.ts`(접수 상태·필터·전용면적), `related.ts`(같은 단지 찾기·목록 묶기), `score.ts`(가점 계산·인근 당첨가점·적합도 별점), `calendar.ts`(월 캘린더), `checklist.ts`(서류 안내), `schedule.ts`(일정·.ics), `account.ts`(Supabase)
+- `src/components/` — `KakaoMap.tsx`(지도·라벨·클러스터), `NoticeDetail.tsx`(공고 상세·가점 비교), `UnitTypes.tsx`(공급 타입·평형·평면도), `ProfileForm.tsx`(내 조건), `Account.tsx`(계정 저장), `Agenda.tsx`(일정: 월 캘린더·날짜별 목록), `SearchBox.tsx`(검색 드롭다운)
+- `src/lib/` — `eligibility.ts`(자격 판정), `filters.ts`(접수 상태·필터·전용면적), `related.ts`(같은 단지 찾기·목록 묶기), `score.ts`(가점 계산·인근 당첨가점·적합도 별점), `units.ts`(평형 이름·면적 구성·내 공급 세대수), `calendar.ts`(월 캘린더), `checklist.ts`(서류 안내), `schedule.ts`(일정·.ics), `account.ts`(Supabase)
 - `src/config/` — `criteria.ts`(판정 기준·가점 배점표, 버전 관리), `tokens.ts`(접수 상태 색 토큰), `ui.ts`(화면 스위치)
 - `src/admin/` — 관리자페이지(수집 현황, 품질, 변경 감지, 수동 보정, 회원 집계)
 - `scripts/fetch-notices.mjs` — 수집 메인. 청약홈 API, LH API, 청년안심주택 목록·상세를 모아 정규화하고 위치를 찾습니다.

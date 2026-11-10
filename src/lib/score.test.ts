@@ -117,3 +117,33 @@ test('면적 구간·예치금은 주택형 코드의 전용면적 기준 (공�
   const rs = evaluate(n, P({ birthYear: 1990, region: '서울', accountMonths: 30, accountPayments: 30, accountDeposit: 300 }));
   assert.ok(rs.some((r) => r.reasons.some((x) => x.includes('예치금 300만원 ≥ 300만원'))), JSON.stringify(rs.map((r) => r.reasons)));
 });
+
+test('공급 타입: 평형 이름·면적 구성·내 공급 유형 세대수', async () => {
+  const { typeLabel, unitStats, myUnits, won } = await import('./units.ts');
+  const { mergeModels } = await import('./overrides.ts');
+  const m = { type: '084.9904A', area: 111.9429, general: 193, special: 226, specialBreakdown: { newlywed: 62, firstLife: 29 }, priceMax: 69100 };
+  assert.equal(typeLabel(m), '84A');
+  assert.equal(typeLabel({ type: '59', label: '25형' }), '25형');
+  const s = unitStats(m);
+  assert.equal(s.households, 419);
+  assert.equal(s.pyeong, 34);
+  assert.equal(Math.round(s.common! * 100) / 100, 26.95);
+  assert.equal(s.pricePerPyeong, 2041);
+  assert.equal(unitStats({ type: '오피스텔', area: 40 }).supply, undefined); // 전용인지 공급인지 모르면 공급으로 쓰지 않음
+  const mine = myUnits(m, [
+    { key: 'general', label: '일반공급 1순위', verdict: 'likely', reasons: [] },
+    { key: 'newlywed', label: '신혼부부 특별공급', verdict: 'check', reasons: [] },
+    { key: 'multiChild', label: '다자녀 특별공급', verdict: 'no', reasons: [] },
+    { key: 'youth', label: '청년 특별공급', verdict: 'likely', reasons: [] }, // 이 주택형 특공 내역에 청년 없음 → 제외
+  ]);
+  assert.deepEqual(mine.map((u) => [u.key, u.count]), [['general', 193], ['newlywed', 62]]);
+  const noBreakdown = myUnits({ type: '59', general: 10 }, [{ key: 'youth', label: '청년 특별공급', verdict: 'likely', reasons: [] }]);
+  assert.deepEqual(noBreakdown.map((u) => u.count), [undefined]); // 내역이 없으면 모름으로 표시
+  assert.equal(won(69100), '6억 9,100만원');
+  assert.equal(won(30000), '3억원');
+  assert.equal(won(850), '850만원');
+  const merged = mergeModels([m], [{ type: '084.9904A', planImage: 'https://example.com/84a.png' }, { type: '059.9000B', deposit: 5000, rent: 60 }]);
+  assert.equal(merged[0].planImage, 'https://example.com/84a.png');
+  assert.equal(merged[0].general, 193);
+  assert.equal(merged.length, 2);
+});

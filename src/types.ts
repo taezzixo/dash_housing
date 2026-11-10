@@ -26,6 +26,14 @@ export interface NoticeModel {
   special?: number; // 특별공급 세대수 합계
   specialBreakdown?: Partial<Record<SpecialKind, number>>;
   priceMax?: number; // 분양최고금액(만원)
+  // 아래는 관리자 보정(overrides.json)이나 향후 출처 확장으로 채우는 값
+  label?: string; // 표시용 평형 이름 (예: '56형'). 없으면 주택형 코드로 만든다
+  exclusiveArea?: number; // 전용면적 ㎡ (주택형 코드에 없을 때)
+  contractArea?: number; // 계약면적 ㎡
+  deposit?: number; // 임대보증금(만원)
+  rent?: number; // 월 임대료(만원)
+  planImage?: string; // 평면도 이미지 URL
+  planSource?: string; // 평면도 출처 페이지 URL (화면에 출처로 표시)
 }
 
 export type SpecialKind =
@@ -166,7 +174,10 @@ export interface ScoreStat {
 // 관리자 수동 보정 (public/data/overrides.json) — GitHub에서 편집
 export interface Overrides {
   hide?: string[]; // 숨길 공고 id
-  patch?: Record<string, Partial<Pick<Notice, 'lat' | 'lng' | 'geoPrecision' | 'address' | 'name' | 'url'>> & { note?: string }>;
+  patch?: Record<string, Partial<Pick<Notice, 'lat' | 'lng' | 'geoPrecision' | 'address' | 'name' | 'url' | 'homepage'>> & {
+    note?: string;
+    models?: (Partial<NoticeModel> & { type: string })[]; // 같은 type은 합치고, 없는 type은 추가 (평면도·보증금 등)
+  }>;
   manual?: Notice[]; // 수동 등록 공고 (SH·GH 등)
 }
 

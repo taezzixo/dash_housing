@@ -643,3 +643,48 @@ fieldset label.check {
   .ed .brand h1 { font-size: 21px; }
   .ed .detail-head h2 { font-size: 22px; }
 }
+
+/* ---- v0.8: 지도 라벨은 다크 모드에서도 흰 바탕 (지도 타일이 항상 밝음), 공급 타입·평형 ---- */
+@media (prefers-color-scheme: dark) {
+  .pin-label, .ed .pin-label { background: #ffffff; box-shadow: 0 6px 18px rgba(0, 0, 0, .35); }
+  .pin-label .pin-body, .ed .pin-label .pin-body { color: #111111; }
+  .pin-label .pin-tail { border-top-color: #ffffff; }
+  .pin-label.sel, .ed .pin-label.sel { outline-color: #111111; }
+}
+
+.unit-k { display: block; font-size: 11px; font-weight: 700; letter-spacing: .12em; color: var(--muted); margin-bottom: 6px; }
+.unit-sum { border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px; margin-bottom: 12px; background: var(--surface); }
+.unit-sum ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.unit-sum li { display: grid; grid-template-columns: 52px 1fr auto; gap: 8px; align-items: baseline; }
+.unit-sum-empty { margin: 0 0 10px; }
+.unit-tabs { display: flex; flex-wrap: wrap; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; margin-bottom: 12px; }
+.unit-tabs button {
+  flex: 1 1 72px; min-width: 64px; border: none; border-left: 1px solid var(--line); background: var(--surface); padding: 9px 6px;
+  cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 1px; color: var(--text);
+}
+.unit-tabs button:first-child { border-left: none; }
+.unit-tabs button b { font-size: 14px; }
+.unit-tabs button small { font-size: 11px; color: var(--muted); }
+.unit-tabs button.on { background: var(--text); color: var(--surface); }
+.unit-tabs button.on small { color: inherit; opacity: .75; }
+.unit-stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 12px 10px; padding: 12px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.unit-stat { display: flex; flex-direction: column; gap: 1px; }
+.unit-stat > small:first-child { font-size: 11px; color: var(--muted); letter-spacing: .04em; }
+.unit-stat b { font-size: 17px; font-variant-numeric: tabular-nums; }
+.ed .unit-stat b { font-family: var(--serif); font-size: 18px; }
+.unit-supply, .unit-mine { margin-top: 12px; }
+.chip-row { display: flex; flex-wrap: wrap; gap: 4px; }
+.unit-mine ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.unit-mine li { display: flex; align-items: center; gap: 8px; font-size: 14px; padding: 6px 10px; border: 1px solid var(--line); border-radius: var(--radius); }
+.unit-mine li.likely { border-color: var(--text); }
+.unit-mine li b { margin-left: auto; font-variant-numeric: tabular-nums; }
+.unit-plan { margin: 14px 0 0; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); padding: 10px; }
+.unit-plan img { display: block; width: 100%; height: auto; max-height: 420px; object-fit: contain; background: #f2f2f2; }
+.unit-plan figcaption { margin-top: 6px; }
+.unit-plan.empty p { margin: 8px 0 0; }
+.area-viz { display: flex; justify-content: center; padding: 6px 0; }
+.area-outer { position: relative; flex: none; width: 230px; height: 170px; max-width: 100%; border: 2px solid var(--text); background: repeating-linear-gradient(45deg, transparent 0 6px, var(--line) 6px 7px); }
+.area-inner { position: absolute; left: 0; bottom: 0; background: var(--surface); border-top: 2px solid var(--text); border-right: 2px solid var(--text); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; text-align: center; padding: 4px; }
+.area-outer-label { position: absolute; top: 6px; right: 8px; font-size: 11px; color: var(--muted); background: var(--surface); padding: 0 4px; }
+.unit-links { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 8px 0 0; }
+.units .disclaimer { margin-top: 12px; }

@@ -8,15 +8,13 @@ import { RECEIPT_LABEL, receiptStatus } from '../lib/filters.ts';
 import { bestVerdict } from '../lib/eligibility.ts';
 import { calcGajeom, fitStars, type NearbyScores } from '../lib/score.ts';
 import { relatedKind } from '../lib/related.ts';
+import { UnitTypes } from './UnitTypes.tsx';
 
 const VERDICT_LABEL = { likely: '조건 충족', check: '추가 확인', no: '조건 불충족' } as const;
 const FIELD_LABEL: Record<string, string> = {
   announce: '모집공고', specialStart: '특공 접수 시작', specialEnd: '특공 접수 종료', rank1Start: '1순위 시작', rank1End: '1순위 종료',
   rank2Start: '2순위 시작', rank2End: '2순위 종료', receiptStart: '접수 시작', receiptEnd: '접수 마감', winner: '당첨자 발표',
   contractStart: '계약 시작', contractEnd: '계약 종료',
-};
-const SB_LABEL: Record<string, string> = {
-  newlywed: '신혼', firstLife: '생애최초', multiChild: '다자녀', oldParents: '노부모', youth: '청년', newborn: '신생아', institution: '기관추천', etc: '기타',
 };
 
 function useChecked(id: string) {
@@ -152,6 +150,8 @@ export function NoticeDetail({ notice: n, profile, hasProfile, today, saved, onT
         </ol>
       </section>
 
+      <UnitTypes notice={n} results={results} hasProfile={hasProfile} onEditProfile={onEditProfile} />
+
       <section>
         <h3>내 자격 판정 <span className="beta-tag">베타</span></h3>
         {!hasProfile ? (
@@ -249,28 +249,6 @@ export function NoticeDetail({ notice: n, profile, hasProfile, today, saved, onT
               <tbody>
                 {n.scores.map((x, i) => (
                   <tr key={i}><td>{x.type}</td><td>{x.reside ?? '-'}</td><td>{x.min ?? '-'}</td><td>{x.avg ?? '-'}</td><td>{x.max ?? '-'}</td></tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      )}
-
-      {!!n.models?.length && (
-        <section>
-          <h3>주택형</h3>
-          <div className="table-wrap">
-            <table>
-              <thead><tr><th>주택형</th><th>면적㎡</th><th>일반</th><th>특공</th><th>최고가</th></tr></thead>
-              <tbody>
-                {n.models.map((m, i) => (
-                  <tr key={i}>
-                    <td>{m.type}</td>
-                    <td>{m.area?.toFixed(1) ?? '-'}</td>
-                    <td>{m.general ?? '-'}</td>
-                    <td title={m.specialBreakdown ? Object.entries(m.specialBreakdown).map(([k, v]) => `${SB_LABEL[k] ?? k} ${v}`).join(', ') : ''}>{m.special ?? '-'}</td>
-                    <td>{m.priceMax ? `${(m.priceMax / 10000).toFixed(1)}억` : '-'}</td>
-                  </tr>
                 ))}
               </tbody>
             </table>
