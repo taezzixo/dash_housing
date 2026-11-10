@@ -318,3 +318,36 @@ fieldset label.check {
 .btn.kakao { background: #fee500; color: #191919; border-color: #fee500; font-weight: 700; }
 .btn.kakao:disabled, .popover .btn:disabled { opacity: .45; }
 .danger-text { color: #dc2626; align-self: flex-start; }
+
+/* ---- v0.4: 지도 라벨(유형·접수상태 띠 + 단지명), 필터 초기화, 가능성 토글 ---- */
+.pin-label {
+  position: relative; width: max-content; max-width: 210px; cursor: pointer;
+  background: #fff; border-radius: 6px; box-shadow: 0 2px 8px rgba(15, 23, 42, .25);
+  font-size: 12px; line-height: 1.3; overflow: visible; transition: opacity .15s;
+}
+.pin-label .pin-head {
+  display: flex; justify-content: space-between; gap: 8px; padding: 3px 8px;
+  color: #fff; font-size: 11px; font-weight: 700; border-radius: 6px 6px 0 0; white-space: nowrap;
+}
+.pin-label .pin-body {
+  padding: 5px 8px 6px; font-weight: 700; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 210px;
+}
+.pin-label .pin-tail {
+  position: absolute; left: 50%; bottom: -7px; transform: translateX(-50%);
+  width: 0; height: 0; border-left: 7px solid transparent; border-right: 7px solid transparent; border-top: 8px solid #fff;
+}
+.pin-label.approx { border: 1px dashed #94a3b8; }
+.pin-label.sel { outline: 2px solid #0f172a; outline-offset: 1px; z-index: 5; }
+@media (prefers-color-scheme: dark) {
+  .pin-label { background: #1e293b; box-shadow: 0 2px 8px rgba(0,0,0,.5); }
+  .pin-label .pin-body { color: #e2e8f0; }
+  .pin-label .pin-tail { border-top-color: #1e293b; }
+  .pin-label.sel { outline-color: #e2e8f0; }
+}
+.legend-note { color: var(--muted); font-size: 11px; }
+.reset-bar {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 6px 16px; background: var(--brand-soft); color: var(--text); border-bottom: 1px solid var(--line);
+}
+.small-btn { padding: 6px 10px; font-size: 13px; }
+.row { display: flex; gap: 6px; flex-wrap: wrap; }

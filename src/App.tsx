@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Category, Notice, NoticeFile, Overrides, Profile, Verdict } from './types.ts';
 import { CATEGORY_LABEL } from './types.ts';
 import { bestVerdict, evaluate, matchScore } from './lib/eligibility.ts';
-import { clearProfile, loadProfile, REGIONS, saveProfile } from './lib/profile.ts';
+import { clearProfile, DEFAULT_PROFILE, loadProfile, REGIONS, saveProfile } from './lib/profile.ts';
+import { clearLocalChecklists } from './lib/account.ts';
 import { dday, nextEvent, todayKST } from './lib/schedule.ts';
 import type { Bounds, ReceiptStatus } from './lib/filters.ts';
 import { AREA_BUCKETS, PRICE_BUCKETS, RECEIPT_LABEL, inBounds, matchArea, matchPrice, receiptStatus, receiptWindow, recentlyChanged } from './lib/filters.ts';
@@ -29,6 +30,12 @@ function loadSaved(): string[] {
     return [];
   }
 }
+// 최종 수집 시각 표기 (한국 시간, F7)
+function fmtKST(iso: string): string {
+  const d = new Date(new Date(iso).getTime() + 9 * 3600e3).toISOString();
+  return `${d.slice(0, 10)} ${d.slice(11, 16)}`;
+}
+
 const isDesktop = () => typeof window !== 'undefined' && window.matchMedia('(min-width: 900px)').matches;
 
 export default function App() {
@@ -68,6 +75,7 @@ export default function App() {
   const [area, setArea] = useState('');
   const [price, setPrice] = useState('');
   const [onlyMatch, setOnlyMatch] = useState(false);
+  const [onlyLikely, setOnlyLikely] = useState(false); // 가능성 높음만 보기 (지도 흐림 + 목록)
   const [bounds, setBounds] = useState<Bounds | null>(null);
   const [syncMap, setSyncMap] = useState(isDesktop);
   const [limit, setLimit] = useState(PAGE);
@@ -167,6 +175,20 @@ export default function App() {
   const listed = useMemo(() => (syncMap && bounds ? filtered.filter((n) => inBounds(n, bounds)) : filtered), [filtered, syncMap, bounds]);
   useEffect(() => setLimit(PAGE), [listed.length]);
 
+  // 보기 필터만 초기화 (저장된 내 조건·관심 공고는 건드리지 않음)
+  const activeCount = [q.trim() !== '', cat !== '', region !== '', status !== '', area !== '', price !== '', showPast, onlyMatch, onlyLikely].filter(Boolean).length;
+  const resetFilters = () => {
+    setQ('');
+    setCat('');
+    setRegion('');
+    setStatus('');
+    setArea('');
+    setPrice('');
+    setShowPast(false);
+    setOnlyMatch(false);
+    setOnlyLikely(false);
+  };
+
   const selected = allNotices.find((n) => n.id === selectedId);
   const related = useMemo(() => (selected ? findRelated(selected, allNotices) : []), [selected, allNotices]);
   // 관심 저장한 단지의 추가모집·무순위 공고 표시용
@@ -239,7 +261,7 @@ export default function App() {
           {REGIONS.map((r) => <option key={r}>{r}</option>)}
         </select>
         <select value={status} onChange={(e) => { const v = e.target.value as StatusFilter; setStatus(v); if (v === 'closed' || v === 'waiting') setShowPast(true); }} aria-label="접수 상태">
-          <option value="">접수 전·접수 중</option>
+          <option value="">전체 (지난 공고 제외)</option>
           <option value="upcoming">접수예정</option>
           <option value="open">접수중</option>
           <option value="waiting">발표·계약 대기</option>
@@ -255,15 +277,25 @@ export default function App() {
           <input type="checkbox" checked={showPast} onChange={(e) => { setShowPast(e.target.checked); if (!e.target.checked && (status === 'closed' || status === 'waiting')) setStatus(''); }} />
           지난 공고{showPast && archive === null ? ' (불러오는 중)' : ''}
         </label>
+        <label className="check" title="조건 충족(✓) 공고만 강조하고 나머지는 흐리게">
+          <input type="checkbox" checked={onlyLikely} disabled={!touched} onChange={(e) => setOnlyLikely(e.target.checked)} />
+          가능성 높음만
+        </label>
         <label className="check">
           <input type="checkbox" checked={onlyMatch} onChange={(e) => { setOnlyMatch(e.target.checked); if (e.target.checked && !touched) pickTab('me'); }} />
           내 조건 매칭순
         </label>
       </div>
 
+      {activeCount > 0 && (
+        <div className="reset-bar">
+          <span className="small muted">필터 {activeCount}개 적용 중</span>
+          <button className="link small" onClick={resetFilters}>초기화</button>
+        </div>
+      )}
       <main className={`body tab-${tab} ${sideOpen ? 'side-open' : 'side-closed'}${UI.fadeBottom ? ' fade' : ''}`}>
         <section className="pane-map">
-          <KakaoMap notices={filtered} verdicts={verdicts} pastIds={pastIds} hasProfile={touched} selectedId={selectedId} onSelect={select} onBoundsChange={setBounds} />
+          <KakaoMap notices={filtered} verdicts={verdicts} pastIds={pastIds} hasProfile={touched} onlyLikely={onlyLikely && touched} today={today} selectedId={selectedId} onSelect={select} onBoundsChange={setBounds} />
         </section>
 
         <section className="pane-side" ref={sideRef}>
@@ -278,6 +310,16 @@ export default function App() {
               persisted={persisted}
               onChange={(p) => { setProfile(p); setTouched(true); }}
               onPersist={(on) => { setPersisted(on); if (on) saveProfile(profile); else clearProfile(); }}
+              onReset={() => { setProfile(DEFAULT_PROFILE); setTouched(false); }}
+              onDeleteAll={() => {
+                setProfile(DEFAULT_PROFILE);
+                setTouched(false);
+                setPersisted(false);
+                setSaved([]);
+                clearProfile();
+                clearLocalChecklists();
+                setOnlyLikely(false);
+              }}
               onSearch={() => {
                 // 입력한 조건으로 맞춤 공고 검색: 진행·예정 공고 중 불충족 제외, 매칭 점수순
                 setTouched(true);
@@ -294,7 +336,7 @@ export default function App() {
               <div className="list-head">
                 <span className="muted small">
                   공고 {listed.length.toLocaleString()}건
-                  {data && !data.sample && ` · 갱신 ${new Date(data.generatedAt).toLocaleDateString('ko-KR')}`}
+                  {data && !data.sample && ` · 최종 수집 ${fmtKST(data.generatedAt)}`}
                 </span>
                 {bounds && (
                   <label className="check small">

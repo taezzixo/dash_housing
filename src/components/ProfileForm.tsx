@@ -8,9 +8,11 @@ interface Props {
   onChange: (p: Profile) => void;
   onPersist: (on: boolean) => void;
   onSearch: () => void;
+  onReset: () => void;
+  onDeleteAll: () => void;
 }
 
-export function ProfileForm({ profile: p, persisted, onChange, onPersist, onSearch }: Props) {
+export function ProfileForm({ profile: p, persisted, onChange, onPersist, onSearch, onReset, onDeleteAll }: Props) {
   const set = <K extends keyof Profile>(k: K, v: Profile[K]) => onChange({ ...p, [k]: v });
   const num = (k: keyof Profile) => ({
     type: 'number' as const,
@@ -28,7 +30,11 @@ export function ProfileForm({ profile: p, persisted, onChange, onPersist, onSear
           <input type="checkbox" checked={persisted} onChange={(e) => onPersist(e.target.checked)} />
           <span>이 기기에 내 조건 저장</span>
         </label>
-        <p className="muted">입력한 정보는 서버로 전송되지 않고 이 브라우저에서만 쓰입니다.</p>
+        <p className="muted">입력한 정보는 서버로 전송되지 않고 이 브라우저에만 저장됩니다. 다른 기기와는 동기화되지 않습니다. 공용 PC라면 저장을 끄거나 아래에서 전체 삭제하세요.</p>
+        <div className="row">
+          <button type="button" className="btn small-btn" onClick={() => { if (confirm('입력한 조건을 모두 비울까요?')) onReset(); }}>입력 초기화</button>
+          <button type="button" className="btn small-btn danger-text" onClick={() => { if (confirm('내 조건, 관심 공고, 서류 체크를 이 기기에서 모두 삭제할까요?')) onDeleteAll(); }}>내 정보 전체 삭제</button>
+        </div>
       </div>
 
       <fieldset>
