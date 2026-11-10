@@ -1,5 +1,5 @@
-:root{--bg:#fff;--text:#111827;--muted:#6b7280;--line:#e5e7eb;--brand:#0f766e;color-scheme:light}
-@media (prefers-color-scheme:dark){:root{--bg:#0b0f14;--text:#e5e7eb;--muted:#9ca3af;--line:#253041;--brand:#2dd4bf;color-scheme:dark}}
+:root{--bg:#fff;--text:#111827;--muted:#6b7280;--line:#e5e7eb;--brand:#111111;color-scheme:light}
+@media (prefers-color-scheme:dark){:root{--bg:#0b0f14;--text:#e5e7eb;--muted:#9ca3af;--line:#253041;--brand:#f2f2f0;color-scheme:dark}}
 body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif;line-height:1.7;font-size:15px}
 main{max-width:760px;margin:0 auto;padding:24px 16px 64px}
 h1{font-size:24px}h2{font-size:17px;margin-top:28px;border-top:1px solid var(--line);padding-top:18px}

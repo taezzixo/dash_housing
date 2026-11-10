@@ -261,13 +261,14 @@ export default function App() {
   ));
 
   return (
-    <div className="app">
+    <div className={`app${UI.editorial ? ' ed' : ''}`}>
       <header className="top">
         <div className="brand">
           <span className="logo">🏠</span>
           <div>
+            <p className="eyebrow">전국 청약 공고 지도</p>
             <h1>청약맵 <span className="beta-tag">베타</span></h1>
-            <p className="muted small">전국 청약 공고 지도 · 내 조건 맞춤 매칭</p>
+            <p className="muted small tagline">전국 청약 공고 지도 · 내 조건 맞춤 매칭</p>
           </div>
         </div>
         <AccountButton acc={acc} />
@@ -370,7 +371,7 @@ export default function App() {
               <MatchPanel notices={baseFiltered} verdicts={verdicts} touched={touched} today={today}
                 onSelect={select} onEditProfile={() => pickTab('me')} />
               <div className="list-head">
-                <span className="muted small">
+                <span className="muted small eyebrow-row">
                   공고 {groups.length.toLocaleString()}건{groups.length !== listed.length && ` (같은 단지 묶음 · 전체 ${listed.length.toLocaleString()}건)`}
                   {data && !data.sample && ` · 최종 수집 ${fmtKST(data.generatedAt)}`}
                 </span>
@@ -384,7 +385,7 @@ export default function App() {
               {loadError && <p className="error">데이터를 불러오지 못했습니다: {loadError}</p>}
               {groups.slice(0, limit).map(({ lead: n, others }, i) => (
                 <NoticeCard key={n.id} n={n} today={today} verdict={verdicts.get(n.id)} saved={saved.includes(n.id)}
-                  savedComplex={!saved.includes(n.id) && isReoffer(n) && savedKeys.has(complexKey(n.name))} more={others.length}
+                  savedComplex={!saved.includes(n.id) && isReoffer(n) && savedKeys.has(complexKey(n.name))} more={others.length} idx={i + 1}
                   active={n.id === selectedId || others.some((o) => o.id === selectedId)} onClick={() => select(n.id)} ad={i === 4} />
               ))}
               {groups.length > limit && (
@@ -507,8 +508,8 @@ const V_LABEL = { likely: '조건 충족', check: '추가 확인', no: '조건 �
 const V_ICON = { likely: '✓', check: '△', no: '✗' } as const;
 const STATUS_RANK: Record<ReceiptStatus, number> = { open: 0, upcoming: 1, unknown: 2, waiting: 3, closed: 4 };
 
-function NoticeCard({ n, today, verdict, saved, savedComplex, more = 0, active, onClick, ad }: {
-  n: Notice; today: string; verdict?: Verdict; saved: boolean; savedComplex?: boolean; more?: number; active: boolean; onClick: () => void; ad: boolean;
+function NoticeCard({ n, today, verdict, saved, savedComplex, more = 0, idx, active, onClick, ad }: {
+  n: Notice; today: string; verdict?: Verdict; saved: boolean; savedComplex?: boolean; more?: number; idx?: number; active: boolean; onClick: () => void; ad: boolean;
 }) {
   const next = nextEvent(n, today);
   const dd = next ? dday(next.start, today) : null;
@@ -530,6 +531,7 @@ function NoticeCard({ n, today, verdict, saved, savedComplex, more = 0, active, 
           {saved && <span className="star">★</span>}
         </div>
         <b className="card-title">{n.name}</b>
+        {idx !== undefined && <span className="card-idx" aria-hidden="true">{String(idx).padStart(2, '0')}</span>}
         <span className="muted small">{n.address ?? n.region}</span>
         {next && (
           <span className="next">

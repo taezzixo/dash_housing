@@ -491,3 +491,155 @@ fieldset label.check {
   .cal-bar { font-size: 9.5px; padding: 0 2px; }
   .cal-day { min-height: 56px; padding: 2px 2px 0; }
 }
+
+/* ---- v0.7: 에디토리얼(매거진) 스타일 — UI.editorial (src/config/ui.ts). Figma 「Architecture Magazine」 참고 ----
+   흑백 잉크 색, 세리프 제목, 자간 넓은 작은 라벨, 가는 선, 각진 모서리. 접수 상태 색(tokens.ts)과 판정 색은 그대로 둔다. */
+.brand .eyebrow { display: none; }
+.card-idx { display: none; }
+.app.ed {
+  --bg: #f7f7f5;
+  --surface: #ffffff;
+  --text: #111111;
+  --muted: #707070;
+  --line: #e4e4e2;
+  --brand: #111111;
+  --brand-soft: #efefec;
+  --radius: 2px;
+  /* 세리프는 잘 갖춰진 한글 명조가 있을 때만. 없으면(윈도 기본 바탕 등) 본문 고딕을 그대로 쓴다. 웹폰트는 내려받지 않는다 */
+  --serif: 'Noto Serif KR', 'Noto Serif CJK KR', 'Nanum Myeongjo', 'AppleMyungjo', Pretendard, -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Noto Sans KR', 'Malgun Gothic', sans-serif;
+  --track: .16em;
+  background: var(--bg);
+  color: var(--text);
+}
+@media (prefers-color-scheme: dark) {
+  .app.ed {
+    --bg: #0d0d0d;
+    --surface: #161616;
+    --text: #f2f2f0;
+    --muted: #a0a09c;
+    --line: #2a2a2a;
+    --brand: #f2f2f0;
+    --brand-soft: #232323;
+  }
+}
+/* 공통 라벨: 작은 대문자·넓은 자간 */
+.ed .eyebrow, .ed .eyebrow-row, .ed .detail h3, .ed .search-sec, .ed .panel-head b, .ed .fit-label, .ed .score-mine small, .ed .score-near > small,
+.ed .cal-day-list > b, .ed fieldset legend {
+  font-size: 11px; font-weight: 700; letter-spacing: var(--track); text-transform: uppercase; color: var(--text);
+}
+.ed .eyebrow-row { color: var(--muted); }
+.ed a { color: var(--text); text-underline-offset: 3px; }
+
+/* 헤더: 로고 위 가는 선 + 세리프 브랜드명 */
+.ed .top { padding: 14px 16px 10px; }
+.ed .logo { display: none; }
+.ed .brand > div { border-top: 1px solid var(--text); padding-top: 6px; min-width: 150px; }
+.ed .brand .eyebrow { display: block; margin: 0; font-size: 10px; color: var(--muted); }
+.ed .brand h1 { font-family: var(--serif); font-weight: 600; font-size: 26px; line-height: 1.15; letter-spacing: -.01em; }
+.ed .brand .tagline { display: none; }
+.ed .beta-tag { background: none; color: var(--muted); border: 1px solid var(--line); border-radius: 2px; font-weight: 600; letter-spacing: .08em; }
+.ed .account > .btn { letter-spacing: .08em; }
+
+/* 버튼·입력: 각진 모서리, 검정 기본 버튼 */
+.ed .btn { border-radius: var(--radius); background: var(--surface); }
+.ed .btn.primary { background: var(--text); border-color: var(--text); color: var(--surface); font-weight: 700; letter-spacing: .08em; }
+.ed .btn.primary:hover { opacity: .88; }
+.ed .icon-btn, .ed .chip, .ed .search-clear { border-radius: var(--radius); }
+.ed .chip.on { background: var(--text); border-color: var(--text); color: var(--surface); }
+.ed .filters select, .ed .search-box input[type='search'], .ed .profile input, .ed .profile select, .ed fieldset input, .ed fieldset select {
+  border-radius: var(--radius); background: var(--surface);
+}
+.ed .search-box input[type='search']:focus { border-color: var(--text); box-shadow: none; }
+.ed .toolbar { border-bottom-color: var(--line); }
+.ed .reset-bar { background: var(--surface); border-bottom: 1px solid var(--line); }
+.ed .search-pop, .ed .popover { border-radius: var(--radius); box-shadow: 0 18px 40px rgba(0, 0, 0, .12); }
+.ed .search-pop mark { background: none; color: var(--text); font-weight: 800; text-decoration: underline; text-underline-offset: 3px; }
+
+/* 탭: 자간 넓은 라벨 + 밑줄. PC 패널 탭은 글자만, 모바일 하단 탭 아이콘은 흑백 */
+.ed .side-tabs { border-top: 1px solid var(--text); }
+.ed .side-tabs button { font-size: 12px; letter-spacing: .12em; font-weight: 600; }
+.ed .side-tabs button span { display: none; }
+.ed .side-tabs button.on { color: var(--text); border-bottom-color: var(--text); font-weight: 800; }
+.ed .tabs button { letter-spacing: .06em; }
+.ed .tabs button span { filter: grayscale(1); opacity: .55; }
+.ed .tabs button.on { color: var(--text); }
+.ed .tabs button.on span { opacity: 1; }
+.ed .side-open-btn { border-radius: var(--radius); background: var(--text); color: var(--surface); border-color: var(--text); letter-spacing: .1em; font-size: 12px; }
+
+/* 목록 카드: 흰 지면 + 번호(01) + 세리프 단지명, 옅은 그림자 */
+.ed .list { gap: 10px; }
+.ed .card { position: relative; border-radius: var(--radius); border-color: transparent; box-shadow: 0 1px 2px rgba(0, 0, 0, .04); padding: 14px 44px 14px 16px; transition: box-shadow .15s ease, border-color .15s ease; }
+.ed .card:hover { box-shadow: 0 10px 28px rgba(0, 0, 0, .08); }
+.ed .card.active { border-color: var(--text); box-shadow: 0 10px 28px rgba(0, 0, 0, .08); }
+.ed .card-title { font-family: var(--serif); font-size: 17px; font-weight: 600; line-height: 1.35; margin-top: 2px; }
+.ed .card-idx { display: block; position: absolute; top: 14px; right: 14px; font-size: 11px; letter-spacing: .1em; color: var(--muted); font-variant-numeric: tabular-nums; }
+.ed .saved-row .card { padding-right: 52px; }
+.ed .next { color: var(--text); font-size: 12px; letter-spacing: .04em; }
+.ed .next em { border-bottom: 1px solid currentColor; }
+.ed .star { margin-left: 0; }
+.ed .tag, .ed .pill { border-radius: var(--radius); letter-spacing: .02em; }
+.ed .tag { background: var(--brand-soft); color: var(--text); font-weight: 600; }
+.ed .tag.soft { background: transparent; color: var(--muted); box-shadow: inset 0 0 0 1px var(--line); }
+.ed .tag.kind { background: var(--text); color: var(--surface); }
+
+/* 맞춤 패널·안내 상자 */
+.ed .panel { border-radius: var(--radius); border-color: transparent; box-shadow: 0 1px 2px rgba(0, 0, 0, .04); }
+.ed .panel.cta, .ed .cta { background: var(--surface); border: 1px solid var(--text); border-radius: var(--radius); }
+.ed .count { border-radius: var(--radius); }
+.ed .count b { font-family: var(--serif); font-size: 24px; }
+.ed .privacy { border-radius: var(--radius); background: var(--surface); border: 1px solid var(--line); }
+.ed fieldset { border-radius: var(--radius); border-color: transparent; box-shadow: 0 1px 2px rgba(0, 0, 0, .04); }
+.ed .disclaimer { border-radius: var(--radius); background: transparent; border-left: 2px solid var(--text); padding: 6px 10px; }
+
+/* 공고 상세: 세리프 큰 제목, 섹션 라벨 위 가는 선 */
+.ed .detail { padding: 16px 20px 28px; }
+.ed .detail-head h2 { font-family: var(--serif); font-size: 26px; font-weight: 600; line-height: 1.25; letter-spacing: -.01em; margin-top: 8px; }
+.ed .detail section { margin-top: 26px; padding-top: 10px; border-top: 1px solid var(--line); }
+.ed .detail section.meta { border-top: none; }
+.ed .detail h3 { margin-bottom: 12px; }
+.ed .detail h3 small { letter-spacing: .04em; text-transform: none; }
+.ed .timeline li { border-bottom-style: solid; }
+.ed .t-kind { font-weight: 600; }
+.ed .timeline li:not(.past):not(.far) .t-dot, .ed .timeline li.now .t-dot { background: var(--text); box-shadow: none; }
+.ed .dday { color: var(--text); letter-spacing: .04em; }
+.ed .result { border-radius: var(--radius); }
+.ed .result.likely { border-color: var(--text); }
+.ed .related li { border-radius: var(--radius); }
+.ed .score-mine { background: var(--surface); border: 1px solid var(--text); }
+.ed .score-mine b { font-family: var(--serif); color: var(--text); font-size: 30px; }
+.ed .score-near, .ed .score-mine { border-radius: var(--radius); }
+.ed .score-row b { font-family: var(--serif); }
+.ed .score-bar { border-radius: 0; height: 4px; }
+.ed .score-bar .range { background: var(--muted); border-radius: 0; }
+.ed .score-bar .me { background: var(--text); }
+.ed .stars { color: var(--text); }
+
+/* 지도 라벨·범례·지도 버튼 */
+.ed .pin-label { border-radius: var(--radius); box-shadow: 0 6px 18px rgba(0, 0, 0, .18); }
+.ed .pin-label .pin-head { border-radius: 2px 2px 0 0; letter-spacing: .06em; }
+.ed .pin-label .pin-body { color: #111; font-size: 12.5px; }
+.ed .pin-label.sel { outline-color: #111; }
+.ed .legend { border-radius: var(--radius); box-shadow: 0 6px 18px rgba(0, 0, 0, .1); letter-spacing: .02em; }
+
+/* 일정 캘린더 */
+.ed .seg { border-radius: var(--radius); }
+.ed .seg button { letter-spacing: .06em; }
+.ed .cal-grid { border-radius: var(--radius); }
+.ed .cal-nav b { font-family: var(--serif); font-size: 20px; font-weight: 600; }
+.ed .cal-bar { border-radius: 1px; }
+.ed .cal-day.today .cal-num { background: var(--text); color: var(--surface); border-radius: 0; }
+.ed .cal-dow { letter-spacing: .12em; }
+
+/* 하단 정보 줄: 자간 넓은 작은 글씨 */
+.ed .app-foot { letter-spacing: .1em; text-transform: uppercase; font-size: 10px; opacity: .8; }
+.ed .app-foot a { text-transform: none; letter-spacing: .02em; }
+.ed .site-foot { letter-spacing: .02em; }
+
+.ed .eyebrow-row { letter-spacing: .06em; }
+@media (max-width: 899px) {
+  .ed .top { padding: 8px 16px 6px; }
+  .ed .brand .eyebrow { display: none; }
+  .ed .brand > div { padding-top: 4px; min-width: 120px; }
+  .ed .brand h1 { font-size: 21px; }
+  .ed .detail-head h2 { font-size: 22px; }
+}
