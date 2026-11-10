@@ -97,3 +97,42 @@ export function rank1Months(noticeRegion: string | undefined, speculativeOrAdjus
   if (noticeRegion && CAPITAL_AREA.includes(noticeRegion)) return 12;
   return 6;
 }
+
+// ---- 민영주택 청약 가점제 배점표 (F4) — 버전 관리 ----
+// 근거: 「주택공급에 관한 규칙」 별표 1 (가점제 적용기준). 84점 만점.
+//  - 무주택기간(32점): 1년 미만 2점, 이후 1년마다 2점 추가, 15년 이상 32점. 유주택자 0점.
+//    기간은 만 30세가 된 날과 혼인신고일 중 빠른 날부터 계산하고, 주택을 처분했다면 처분일 이후부터 계산.
+//  - 부양가족수(35점): 0명 5점, 1명마다 5점 추가, 6명 이상 35점.
+//  - 청약통장 가입기간(17점): 6개월 미만 1점, 6개월~1년 미만 2점, 이후 1년마다 1점 추가, 15년 이상 17점.
+// ⚠️ 원문 검증 필요: 배우자 통장 가입기간 가산(기간의 50%, 최대 3점, 2024-03-25 시행), 미성년 가입기간 인정 상한(최대 5년),
+//    직계존속 부양 인정 요건(3년 이상 같은 세대 등)은 계산기에 반영하지 않았다. 최종 가점은 청약홈 가점 계산기와 공고문으로 확인.
+// 배점이 바뀌면 GAJEOM_VERSIONS 맨 앞에 새 버전을 추가하고 기존 버전은 지우지 않는다.
+export interface GajeomTable {
+  id: string;
+  effectiveFrom: string;
+  checkedAt: string;
+  source: string;
+  homeless: { max: number; base: number; perYear: number }; // base: 1년 미만 점수
+  dependents: { max: number; base: number; perPerson: number }; // base: 0명 점수
+  account: { max: number; under6m: number; under1y: number; perYear: number }; // 1년 이상: under1y + perYear × 경과연수
+  total: number;
+}
+
+export const GAJEOM_VERSIONS: GajeomTable[] = [
+  {
+    id: '2024-rule',
+    effectiveFrom: '2024-03-25',
+    checkedAt: '2026-11-10',
+    source: '주택공급에 관한 규칙 별표 1 (원문 재확인 필요)',
+    homeless: { max: 32, base: 2, perYear: 2 },
+    dependents: { max: 35, base: 5, perPerson: 5 },
+    account: { max: 17, under6m: 1, under1y: 2, perYear: 1 },
+    total: 84,
+  },
+];
+
+export function gajeomTableFor(announce?: string): GajeomTable {
+  const sorted = [...GAJEOM_VERSIONS].sort((a, b) => b.effectiveFrom.localeCompare(a.effectiveFrom));
+  if (!announce) return sorted[0];
+  return sorted.find((v) => v.effectiveFrom <= announce) ?? sorted[sorted.length - 1];
+}

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { Notice, Verdict } from '../types.ts';
 import type { Bounds, ReceiptStatus } from '../lib/filters.ts';
 import { receiptStatus } from '../lib/filters.ts';
+import { STATUS_COLOR, STATUS_SHORT } from '../config/tokens.ts';
 
 declare global {
   interface Window {
@@ -24,21 +25,8 @@ function loadSdk(): Promise<any> {
   return sdkPromise;
 }
 
-// 지도 색은 접수 상태만 뜻한다 (F5). 판정(충족·추가확인·불충족)은 색이 아니라 목록 배지·토글로 표현한다.
-export const STATUS_COLOR: Record<ReceiptStatus, string> = {
-  upcoming: '#2563eb', // 접수예정: 파랑
-  open: '#059669', // 접수중: 초록
-  waiting: '#7c3aed', // 발표·계약 대기: 보라
-  closed: '#64748b', // 지난 공고: 회색
-  unknown: '#0891b2', // 일정확인: 청록
-};
-export const STATUS_SHORT: Record<ReceiptStatus, string> = {
-  upcoming: '접수예정',
-  open: '접수중',
-  waiting: '계약 대기',
-  closed: '지난 공고',
-  unknown: '일정확인',
-};
+// 지도 색은 접수 상태만 뜻한다 (F5). 값은 src/config/tokens.ts 한 곳에서 관리한다.
+export { STATUS_COLOR, STATUS_SHORT };
 const CAT_SHORT: Record<string, string> = {
   APT: '아파트',
   OFFICETEL: '오피스텔',
@@ -231,6 +219,7 @@ export function KakaoMap({ notices, verdicts, pastIds, hasProfile, onlyLikely, t
         kakao.maps.event.addListener(map.current, 'idle', report);
         report();
         draw();
+        focusPending(); // 공유 링크(/?id=)로 들어와 지도보다 선택이 먼저 정해진 경우
       })
       .catch((e) => setError(e.message));
     return () => {
@@ -241,38 +230,57 @@ export function KakaoMap({ notices, verdicts, pastIds, hasProfile, onlyLikely, t
 
   useEffect(() => {
     draw();
+    focusPending(); // 데이터가 늦게 도착한 경우
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [notices, verdicts, pastIds, onlyLikely, today]);
+
+  /** 선택한 공고로 지도를 옮긴다. 지도·데이터가 아직 없으면 보류했다가 준비되면 실행 */
+  const pendingFocus = useRef<{ id: string; byMarker: boolean } | null>(null);
+  function focusPending() {
+    const p = pendingFocus.current;
+    const kakao = window.kakao;
+    if (!p || !kakao || !map.current) return;
+    const n = latest.current.notices.find((x) => x.id === p.id);
+    if (!n) return; // 데이터 도착 전 — 다음 draw 때 다시 시도
+    pendingFocus.current = null;
+    if (!n.lat || !n.lng) return;
+    const m = markerById.current.get(n.id);
+    if (m) {
+      m.mk.setImage(markerImage(kakao, STATUS_COLOR[m.st], true));
+      m.mk.setZIndex(10);
+    }
+    const pos = new kakao.maps.LatLng(n.lat, n.lng);
+    if (!p.byMarker) {
+      const target = n.geoPrecision === 'region' ? 10 : n.geoPrecision === 'district' ? 8 : 5;
+      if (map.current.getLevel() > target) map.current.setLevel(target);
+    }
+    setTimeout(() => {
+      if (!map.current) return;
+      if (!map.current.getBounds().contain(pos)) map.current.panTo(pos);
+      refreshLabels();
+    }, 360);
+  }
 
   // 선택 표시: 선택한 마커만 크게. 마커로 골랐으면 확대 수준 유지, 목록에서 골랐을 때만 필요 시 확대
   const prevSelected = useRef<string | undefined>(undefined);
   useEffect(() => {
     selectedRef.current = selectedId;
+    const byMarker = fromMarker.current;
+    fromMarker.current = false;
+    pendingFocus.current = selectedId ? { id: selectedId, byMarker } : null;
     const kakao = window.kakao;
-    if (!kakao || !map.current) return;
-    for (const id of [prevSelected.current, selectedId]) {
-      const m = id && markerById.current.get(id);
-      if (m) {
-        const sel = id === selectedId;
-        m.mk.setImage(markerImage(kakao, STATUS_COLOR[m.st], sel));
-        m.mk.setZIndex(sel ? 10 : 0);
+    if (kakao && map.current) {
+      for (const id of [prevSelected.current, selectedId]) {
+        const m = id && markerById.current.get(id);
+        if (m) {
+          const sel = id === selectedId;
+          m.mk.setImage(markerImage(kakao, STATUS_COLOR[m.st], sel));
+          m.mk.setZIndex(sel ? 10 : 0);
+        }
       }
     }
     prevSelected.current = selectedId;
-    const n = notices.find((x) => x.id === selectedId);
-    const byMarker = fromMarker.current;
-    fromMarker.current = false;
-    if (!n?.lat) return;
-    const pos = new kakao.maps.LatLng(n.lat, n.lng);
-    if (!byMarker) {
-      const target = n.geoPrecision === 'region' ? 10 : n.geoPrecision === 'district' ? 8 : 5;
-      if (map.current.getLevel() > target) map.current.setLevel(target);
-    }
-    const t = setTimeout(() => {
-      if (!map.current.getBounds().contain(pos)) map.current.panTo(pos);
-      refreshLabels();
-    }, 360);
-    return () => clearTimeout(t);
+    focusPending();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId]);
 

@@ -5,6 +5,9 @@ import { evaluate } from '../lib/eligibility.ts';
 import { buildChecklist } from '../lib/checklist.ts';
 import { buildIcs, dday, eventsOf } from '../lib/schedule.ts';
 import { RECEIPT_LABEL, receiptStatus } from '../lib/filters.ts';
+import { bestVerdict } from '../lib/eligibility.ts';
+import { calcGajeom, fitStars, type NearbyScores } from '../lib/score.ts';
+import { relatedKind } from '../lib/related.ts';
 
 const VERDICT_LABEL = { likely: '조건 충족', check: '추가 확인', no: '조건 불충족' } as const;
 const FIELD_LABEL: Record<string, string> = {
@@ -62,10 +65,21 @@ interface Props {
   onEditProfile: () => void;
   related?: Notice[]; // 같은 단지의 다른 공고 (최초 분양 ↔ 무순위·추가모집)
   onSelectRelated?: (id: string) => void;
+  nearby?: NearbyScores | null; // 인근 당첨가점 (같은 시군구 → 시도)
 }
 
-export function NoticeDetail({ notice: n, profile, hasProfile, today, saved, onToggleSave, onClose, onEditProfile, related = [], onSelectRelated }: Props) {
+const FAR_DAYS = 30; // 이보다 먼 일정은 날짜만 작게
+
+function Stars({ n }: { n: number }) {
+  return <span className="stars" aria-label={`5점 중 ${n}점`}>{'★'.repeat(n)}<span className="off">{'★'.repeat(5 - n)}</span></span>;
+}
+
+export function NoticeDetail({ notice: n, profile, hasProfile, today, saved, onToggleSave, onClose, onEditProfile, related = [], onSelectRelated, nearby }: Props) {
   const results = evaluate(n, profile);
+  const fit = hasProfile ? fitStars(n, profile, bestVerdict(results)) : null;
+  // 가점제는 민영주택에 적용 (국민주택은 순차제, 무순위·임의공급은 추첨)
+  const usesGajeom = n.category === 'APT' && /민영/.test(n.subType ?? '');
+  const gajeom = hasProfile && usesGajeom ? calcGajeom(profile, today, n.dates.announce) : null;
   const checklist = buildChecklist(n, results);
   const [done, setDone] = useChecked(n.id);
   const events = eventsOf(n);
@@ -125,42 +139,18 @@ export function NoticeDetail({ notice: n, profile, hasProfile, today, saved, onT
           {events.map((e) => {
             const dd = dday(e.start, today);
             const past = (e.end ?? e.start) < today;
+            const far = !past && dd > FAR_DAYS;
             return (
-              <li key={e.kind} className={past ? 'past' : ''}>
+              <li key={e.kind} className={past ? 'past' : far ? 'far' : dd <= 0 ? 'now' : ''}>
+                <span className="t-dot" aria-hidden="true" />
                 <span className="t-kind">{e.kind}</span>
                 <span className="t-date">{e.start}{e.end && e.end !== e.start ? ` ~ ${e.end.slice(5)}` : ''}</span>
-                {!past && <span className="dday">{dd === 0 ? 'D-DAY' : dd > 0 ? `D-${dd}` : '진행중'}</span>}
+                {!past && !far && <span className="dday">{dd === 0 ? 'D-DAY' : dd > 0 ? `D-${dd}` : '진행중'}</span>}
               </li>
             );
           })}
         </ol>
       </section>
-
-      {related.length > 0 && (
-        <section>
-          <h3>같은 단지 다른 공고 <small className="muted">{related.length}건</small></h3>
-          <ul className="related">
-            {related.slice(0, 6).map((r) => {
-              const st = receiptStatus(r, today);
-              const rates = (r.competition ?? []).map((c) => c.local?.rate ?? c.other?.rate).filter((x): x is number => x !== undefined && x > 0);
-              const mins = (r.scores ?? []).map((x) => x.min).filter((x): x is number => x !== undefined);
-              return (
-                <li key={r.id}>
-                  <button className="link" onClick={() => onSelectRelated?.(r.id)}>
-                    <span className={`tag st-${st}`}>{RECEIPT_LABEL[st]}</span> <b>{CATEGORY_LABEL[r.category]}</b> · {r.dates.announce ?? '-'} 공고
-                    <div className="small muted">
-                      {r.name}
-                      {rates.length > 0 && ` · 1순위 최고 ${Math.max(...rates).toFixed(1)}:1`}
-                      {mins.length > 0 && ` · 최저 가점 ${Math.min(...mins)}점`}
-                    </div>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-          <p className="small muted">공고명으로 같은 단지를 찾은 결과입니다. 다른 단지가 섞일 수 있습니다.</p>
-        </section>
-      )}
 
       <section>
         <h3>내 자격 판정 <span className="beta-tag">베타</span></h3>
@@ -179,8 +169,55 @@ export function NoticeDetail({ notice: n, profile, hasProfile, today, saved, onT
           ))}
         </div>
         )}
-        <p className="disclaimer">판정은 공개 기준에 따른 참고용 안내입니다. 최종 자격은 반드시 입주자모집공고문과 청약홈에서 확인하세요.</p>
+        {hasProfile && (
+          <div className="fit">
+            <span className="fit-label">내 조건 적합도</span>
+            {fit ? <><Stars n={fit.stars} /><small className="muted">{fit.reasons.join(' · ')}</small></> : <small className="muted">조건 불충족으로 별점을 표시하지 않습니다 (참고용)</small>}
+          </div>
+        )}
+        <p className="disclaimer">판정은 공개 기준에 따른 참고용 안내입니다. 별점은 당첨 가능성이 아니라 내 조건(자격·관심 지역·면적·가격)과 맞는 정도입니다. 최종 자격은 반드시 입주자모집공고문과 청약홈에서 확인하세요.{n.url && <> <a href={n.url} target="_blank" rel="noreferrer">공고 원문 ↗</a></>}</p>
       </section>
+
+      {usesGajeom && (
+        <section>
+          <h3>내 가점 vs 인근 당첨가점 <span className="beta-tag">베타</span></h3>
+          {!gajeom ? (
+            <div className="cta">
+              <p>출생연도·혼인·자녀·통장 가입기간을 입력하면 가점(84점 만점)을 계산해 인근 당첨가점과 비교합니다.</p>
+              <button className="btn primary" onClick={onEditProfile}>내 조건 입력하기</button>
+            </div>
+          ) : (
+            <>
+              <div className="score-compare">
+                <div className="score-mine"><small>내 가점</small><b>{gajeom.complete ? gajeom.total : '-'}</b><small className="muted">/ {gajeom.max}점</small></div>
+                <div className="score-near">
+                  <small>인근 당첨가점{nearby ? ` · ${nearby.scope} ${nearby.count}개 단지` : ''}</small>
+                  {nearby ? (
+                    <div className="score-row">
+                      <span>최저 <b>{Number.isNaN(nearby.min) ? '-' : nearby.min}</b></span>
+                      <span>평균 <b>{Number.isNaN(nearby.avg) ? '-' : nearby.avg}</b></span>
+                      <span>최고 <b>{Number.isNaN(nearby.max) ? '-' : nearby.max}</b></span>
+                    </div>
+                  ) : <span className="muted small">데이터 없음</span>}
+                </div>
+              </div>
+              {nearby && gajeom.complete && !Number.isNaN(nearby.min) && (
+                <div className="score-bar" aria-hidden="true">
+                  <span className="range" style={{ left: `${(nearby.min / 84) * 100}%`, width: `${(((Number.isNaN(nearby.max) ? nearby.min : nearby.max) - nearby.min) / 84) * 100}%` }} />
+                  <span className="me" style={{ left: `${(gajeom.total / 84) * 100}%` }} />
+                </div>
+              )}
+              <ul className="score-parts">
+                {gajeom.parts.map((x) => <li key={x.key}><span>{x.label}</span><span className="muted small">{x.basis}</span><b>{x.points}<small className="muted">/{x.max}</small></b></li>)}
+              </ul>
+              <p className="disclaimer">
+                가점은 입력값으로 계산한 참고값입니다. {gajeom.notes.join(' ')} 인근 당첨가점은 최근 1년 청약홈 발표 기준으로, 주택형·거주지역 구분 없이 합쳐서 보여줍니다.
+                정확한 가점은 <a href="https://www.applyhome.co.kr" target="_blank" rel="noreferrer">청약홈</a> 가점 계산기와 공고문으로 확인하세요.
+              </p>
+            </>
+          )}
+        </section>
+      )}
 
       {!!n.competition?.length && (
         <section>
@@ -259,6 +296,32 @@ export function NoticeDetail({ notice: n, profile, hasProfile, today, saved, onT
           ))}
         </ul>
       </section>
+
+      {related.length > 0 && (
+        <section>
+          <h3>같은 단지의 다른 공고 <small className="muted">{related.length}건</small></h3>
+          <ul className="related">
+            {related.slice(0, 6).map((r) => {
+              const st = receiptStatus(r, today);
+              const rates = (r.competition ?? []).map((c) => c.local?.rate ?? c.other?.rate).filter((x): x is number => x !== undefined && x > 0);
+              const mins = (r.scores ?? []).map((x) => x.min).filter((x): x is number => x !== undefined);
+              return (
+                <li key={r.id}>
+                  <button className="link" onClick={() => onSelectRelated?.(r.id)}>
+                    <span className="tag kind">{relatedKind(r)}</span> <span className={`tag st-${st}`}>{RECEIPT_LABEL[st]}</span> <b>{CATEGORY_LABEL[r.category]}</b> · {r.dates.announce ?? '-'} 공고
+                    <div className="small muted">
+                      {r.name}
+                      {rates.length > 0 && ` · 1순위 최고 ${Math.max(...rates).toFixed(1)}:1`}
+                      {mins.length > 0 && ` · 최저 가점 ${Math.min(...mins)}점`}
+                    </div>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+          <p className="small muted">공고명으로 같은 단지를 찾은 결과입니다. 다른 단지가 섞일 수 있습니다.</p>
+        </section>
+      )}
 
       <section className="meta muted">
         {n.builder && <div>시공: {n.builder}</div>}

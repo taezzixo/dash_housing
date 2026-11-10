@@ -1,6 +1,7 @@
 import type { Notice, Profile, ProgramResult, Verdict } from '../types.ts';
 import type { Criteria } from '../config/criteria.ts';
 import { CAPITAL_AREA, criteriaFor, depositRequired, income100, rank1Months } from '../config/criteria.ts';
+import { exclusiveArea } from './filters.ts';
 
 // 판정 규칙: 하나라도 명확히 불충족 → 'no', 입력 부족·공고별 상이 → 'check', 모두 충족 → 'likely'
 class Check {
@@ -65,7 +66,8 @@ function checkHomeless(c: Check, p: Profile) {
 }
 
 function minModelArea(n: Notice): number | undefined {
-  const areas = (n.models ?? []).map((m) => m.area).filter((a): a is number => !!a);
+  // 예치금 기준은 전용면적 기준 (models.area 는 공급면적)
+  const areas = (n.models ?? []).map(exclusiveArea).filter((a): a is number => !!a);
   return areas.length ? Math.min(...areas) : undefined;
 }
 

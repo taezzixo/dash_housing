@@ -1,4 +1,4 @@
-import type { Notice } from '../types.ts';
+import type { Notice, NoticeModel } from '../types.ts';
 
 // 접수 상태 (D1)
 // waiting: 접수는 끝났지만 당첨자 발표·계약이 남은 공고 (신청자에게는 아직 진행 중)
@@ -78,11 +78,20 @@ export const PRICE_BUCKETS: Bucket[] = [
   { key: 'gt9', label: '9억 초과', min: 90000, max: Infinity },
 ];
 
+/**
+ * 전용면적(㎡). 청약홈 주택형 코드('084.9904A')의 숫자가 전용면적이고, models.area 는 공급면적이다.
+ * 면적 구간·예치금 기준은 모두 전용면적 기준이므로 코드에서 읽을 수 있으면 그 값을 쓴다.
+ */
+export function exclusiveArea(m: NoticeModel): number | undefined {
+  const t = m.type?.match(/^0*(\d{2,3}\.\d{2,})/);
+  return t ? parseFloat(t[1]) : m.area;
+}
+
 /** 주택형 중 하나라도 구간에 들면 통과. 주택형 정보가 없는 공고(LH 등)는 필터 적용 시 제외 */
 export function matchArea(n: Notice, b: Bucket): boolean {
   if (b.min === undefined) return true;
-  return (n.models ?? []).some((m) => m.area !== undefined && m.area > b.min! && m.area <= b.max!) ||
-    (b.min === 0 && (n.models ?? []).some((m) => m.area === 0));
+  const areas = (n.models ?? []).map(exclusiveArea);
+  return areas.some((a) => a !== undefined && a > b.min! && a <= b.max!) || (b.min === 0 && areas.some((a) => a === 0));
 }
 
 export function matchPrice(n: Notice, b: Bucket): boolean {

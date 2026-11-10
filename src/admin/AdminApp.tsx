@@ -203,7 +203,12 @@ function ManualPanel({ ov, notices }: { ov: Overrides | null; notices: Notice[] 
         <label>유형
           <select value={f.category} onChange={set('category')}>{(Object.keys(CATEGORY_LABEL) as Category[]).map((c) => <option key={c} value={c}>{CATEGORY_LABEL[c]}</option>)}</select>
         </label>
-        <label>세부유형<input value={f.subType} onChange={set('subType')} /></label>
+        <label>세부유형<input value={f.subType} onChange={set('subType')} list="rent-subtypes" placeholder="예: SH 행복주택" />
+          <datalist id="rent-subtypes">
+            {/* F12: SH·GH 임대는 자동 수집하지 않으므로 수동 등록 시 유형 이름을 통일한다 */}
+            {['SH', 'GH'].flatMap((o) => ['행복주택', '국민임대', '장기전세', '매입임대', '영구임대'].map((t) => <option key={o + t} value={`${o} ${t}`} />))}
+          </datalist>
+        </label>
         <label>지역<select value={f.region} onChange={set('region')}>{REGIONS.map((r) => <option key={r}>{r}</option>)}</select></label>
         <label>주소<input value={f.address} onChange={set('address')} placeholder="서울특별시 OO구 OO동 123" /></label>
         <label>공고일<input type="date" value={f.announce} onChange={set('announce')} /></label>

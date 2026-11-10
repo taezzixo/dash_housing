@@ -7,12 +7,14 @@ import { clearLocalChecklists } from './lib/account.ts';
 import { dday, nextEvent, todayKST } from './lib/schedule.ts';
 import type { Bounds, ReceiptStatus } from './lib/filters.ts';
 import { AREA_BUCKETS, PRICE_BUCKETS, RECEIPT_LABEL, inBounds, matchArea, matchPrice, receiptStatus, receiptWindow, recentlyChanged } from './lib/filters.ts';
-import { complexKey, findRelated, isReoffer } from './lib/related.ts';
+import { complexKey, findRelated, groupByComplex, isReoffer } from './lib/related.ts';
+import { nearbyScores } from './lib/score.ts';
 import { KakaoMap } from './components/KakaoMap.tsx';
 import { NoticeDetail } from './components/NoticeDetail.tsx';
 import { ProfileForm } from './components/ProfileForm.tsx';
 import { Agenda } from './components/Agenda.tsx';
 import { AdSlot } from './components/AdSlot.tsx';
+import { SearchBox } from './components/SearchBox.tsx';
 import { applyOverrides } from './lib/overrides.ts';
 import { UI } from './config/ui.ts';
 import { AccountButton, useAccount } from './components/Account.tsx';
@@ -173,7 +175,14 @@ export default function App() {
 
   // 목록: 지도 영역 연동 (D2)
   const listed = useMemo(() => (syncMap && bounds ? filtered.filter((n) => inBounds(n, bounds)) : filtered), [filtered, syncMap, bounds]);
-  useEffect(() => setLimit(PAGE), [listed.length]);
+  // F9: 같은 단지 공고는 1건으로 묶는다 (대표: 접수중 → 접수예정 → 일정확인 → 계약 대기 → 지난 공고)
+  const groups = useMemo(() => groupByComplex(listed, (n) => STATUS_RANK[receiptStatus(n, today)]), [listed, today]);
+  useEffect(() => setLimit(PAGE), [groups.length]);
+  // 일정 탭 캘린더: 접수 상태와 무관하게 유형·지역·검색 조건만 적용 (지난 달 막대도 보이도록 보관 공고 포함)
+  const calNotices = useMemo(() => {
+    const qq = q.trim();
+    return allNotices.filter((n) => (!cat || n.category === cat) && (!region || n.region === region) && (!qq || `${n.name} ${n.address ?? ''} ${n.region ?? ''}`.includes(qq)));
+  }, [allNotices, cat, region, q]);
 
   // 보기 필터만 초기화 (저장된 내 조건·관심 공고는 건드리지 않음)
   const activeCount = [q.trim() !== '', cat !== '', region !== '', status !== '', area !== '', price !== '', showPast, onlyMatch, onlyLikely].filter(Boolean).length;
@@ -191,6 +200,7 @@ export default function App() {
 
   const selected = allNotices.find((n) => n.id === selectedId);
   const related = useMemo(() => (selected ? findRelated(selected, allNotices) : []), [selected, allNotices]);
+  const nearby = useMemo(() => (selected ? nearbyScores(selected, allNotices) : null), [selected, allNotices]);
   // 관심 저장한 단지의 추가모집·무순위 공고 표시용
   const savedKeys = useMemo(() => new Set(allNotices.filter((n) => saved.includes(n.id)).map((n) => complexKey(n.name))), [allNotices, saved]);
   const pastIds = useMemo(() => new Set(notices.filter((n) => ['closed', 'waiting'].includes(receiptStatus(n, today))).map((n) => n.id)), [notices, today]);
@@ -217,7 +227,7 @@ export default function App() {
     }
     setSelectedId(id);
   };
-  // 탭: 데스크톱에서 '지도' 또는 이미 열린 탭을 다시 누르면 패널을 닫아 지도를 가득 채운다
+  // 탭 (F3): 모바일은 하단 탭(지도·공고·관심·일정·내 조건), PC는 오른쪽 패널 위 탭 + 패널 접기 버튼
   const pickTab = (k: Tab) => {
     if (!desktop) {
       setTab(k);
@@ -225,7 +235,8 @@ export default function App() {
       return;
     }
     detailOpenedSide.current = false;
-    if (k === 'map' || (k === tab && sideOpen && !selectedId)) {
+    // 탭이 패널 위에 있으므로 같은 탭을 다시 눌러도 패널을 닫지 않는다 (닫기는 › 버튼)
+    if (k === 'map') {
       setSideOpen(false);
       setSelectedId(undefined);
       return;
@@ -235,6 +246,19 @@ export default function App() {
     setSideOpen(true);
   };
   const toggleSave = (id: string) => setSaved((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
+  const closeSide = () => {
+    detailOpenedSide.current = false;
+    setSideOpen(false);
+    setSelectedId(undefined);
+  };
+  const TABS = ([['map', '🗺️', '지도'], ['list', '📋', '공고'], ['saved', '⭐', `관심${saved.length ? ` ${saved.length}` : ''}`], ['agenda', '📅', '일정'], ['me', '👤', '내 조건']] as const)
+    .filter(([k]) => !desktop || k !== 'map'); // PC는 지도가 항상 보이므로 '지도' 탭 대신 패널 접기 버튼
+  const tabOn = (k: Tab) => (desktop ? sideOpen && tab === k : tab === k);
+  const tabButtons = TABS.map(([k, ic, label]) => (
+    <button key={k} className={tabOn(k) ? 'on' : ''} aria-pressed={tabOn(k)} onClick={() => pickTab(k)}>
+      <span>{ic}</span>{label}
+    </button>
+  ));
 
   return (
     <div className="app">
@@ -250,8 +274,10 @@ export default function App() {
         {data?.sample && <div className="banner">샘플 데이터 표시 중 (실제 공고 아님)</div>}
       </header>
 
+      <div className="toolbar">
+        <SearchBox q={q} setQ={setQ} notices={notices} archive={showPast ? null : archive} today={today}
+          onPick={(id) => { if (!notices.some((n) => n.id === id)) setShowPast(true); select(id); }} onShowPast={() => setShowPast(true)} />
       <div className="filters">
-        <input type="search" placeholder="단지명·지역 검색" value={q} onChange={(e) => setQ(e.target.value)} />
         <select value={cat} onChange={(e) => setCat(e.target.value as Category | '')} aria-label="공급 유형">
           <option value="">전체 유형</option>
           {(Object.keys(CATEGORY_LABEL) as Category[]).map((c) => <option key={c} value={c}>{CATEGORY_LABEL[c]}</option>)}
@@ -286,6 +312,7 @@ export default function App() {
           내 조건 매칭순
         </label>
       </div>
+      </div>
 
       {activeCount > 0 && (
         <div className="reset-bar">
@@ -294,13 +321,22 @@ export default function App() {
         </div>
       )}
       <main className={`body tab-${tab} ${sideOpen ? 'side-open' : 'side-closed'}${UI.fadeBottom ? ' fade' : ''}`}>
+        {desktop && (
+          <nav className="side-tabs" aria-label="패널 전환">
+            {tabButtons}
+            <button className="side-close" onClick={closeSide} aria-label="패널 접기 (지도 넓게)" title="패널 접기 (지도 넓게)">›</button>
+          </nav>
+        )}
         <section className="pane-map">
+          {desktop && !sideOpen && (
+            <button className="side-open-btn" onClick={() => pickTab(tab)} aria-label="목록 패널 열기">‹ 목록 열기</button>
+          )}
           <KakaoMap notices={filtered} verdicts={verdicts} pastIds={pastIds} hasProfile={touched} onlyLikely={onlyLikely && touched} today={today} selectedId={selectedId} onSelect={select} onBoundsChange={setBounds} />
         </section>
 
         <section className="pane-side" ref={sideRef}>
           {tab === 'agenda' ? (
-            <Agenda notices={notices} savedIds={saved} today={today} onSelect={select} />
+            <Agenda notices={calNotices} savedIds={saved} today={today} onSelect={select} />
           ) : tab === 'saved' ? (
             <SavedList notices={allNotices.filter((n) => saved.includes(n.id))} today={today} verdicts={verdicts}
               selectedId={selectedId} onSelect={select} onUnsave={toggleSave} onBrowse={() => pickTab('list')} />
@@ -335,7 +371,7 @@ export default function App() {
                 onSelect={select} onEditProfile={() => pickTab('me')} />
               <div className="list-head">
                 <span className="muted small">
-                  공고 {listed.length.toLocaleString()}건
+                  공고 {groups.length.toLocaleString()}건{groups.length !== listed.length && ` (같은 단지 묶음 · 전체 ${listed.length.toLocaleString()}건)`}
                   {data && !data.sample && ` · 최종 수집 ${fmtKST(data.generatedAt)}`}
                 </span>
                 {bounds && (
@@ -346,13 +382,13 @@ export default function App() {
                 )}
               </div>
               {loadError && <p className="error">데이터를 불러오지 못했습니다: {loadError}</p>}
-              {listed.slice(0, limit).map((n, i) => (
+              {groups.slice(0, limit).map(({ lead: n, others }, i) => (
                 <NoticeCard key={n.id} n={n} today={today} verdict={verdicts.get(n.id)} saved={saved.includes(n.id)}
-                  savedComplex={!saved.includes(n.id) && isReoffer(n) && savedKeys.has(complexKey(n.name))}
-                  active={n.id === selectedId} onClick={() => select(n.id)} ad={i === 4} />
+                  savedComplex={!saved.includes(n.id) && isReoffer(n) && savedKeys.has(complexKey(n.name))} more={others.length}
+                  active={n.id === selectedId || others.some((o) => o.id === selectedId)} onClick={() => select(n.id)} ad={i === 4} />
               ))}
-              {listed.length > limit && (
-                <button className="btn more" onClick={() => setLimit((l) => l + PAGE)}>더 보기 ({(listed.length - limit).toLocaleString()}건 남음)</button>
+              {groups.length > limit && (
+                <button className="btn more" onClick={() => setLimit((l) => l + PAGE)}>더 보기 ({(groups.length - limit).toLocaleString()}건 남음)</button>
               )}
               {!listed.length && data && (
                 <p className="muted empty">
@@ -367,18 +403,11 @@ export default function App() {
         {selected && (
           <NoticeDetail notice={selected} profile={profile} hasProfile={touched} today={today}
             saved={saved.includes(selected.id)} onToggleSave={() => toggleSave(selected.id)} onClose={closeDetail}
-            onEditProfile={() => pickTab('me')} related={related} onSelectRelated={(id) => setSelectedId(id)} />
+            onEditProfile={() => pickTab('me')} related={related} onSelectRelated={(id) => setSelectedId(id)} nearby={nearby} />
         )}
       </main>
 
-      <nav className="tabs" aria-label="화면 전환">
-        {([['map', '🗺️', '지도'], ['list', '📋', '공고'], ['saved', '⭐', `관심${saved.length ? ` ${saved.length}` : ''}`], ['agenda', '📅', '일정'], ['me', '👤', '내 조건']] as const).map(([k, ic, label]) => (
-          <button key={k} className={(desktop ? (k === 'map' ? !sideOpen : sideOpen && tab === k) : tab === k) ? 'on' : ''}
-            aria-pressed={desktop ? (k === 'map' ? !sideOpen : sideOpen && tab === k) : tab === k} onClick={() => pickTab(k)}>
-            <span>{ic}</span>{label}
-          </button>
-        ))}
-      </nav>
+      {!desktop && <nav className="tabs" aria-label="화면 전환">{tabButtons}</nav>}
 
       <footer className="app-foot">
         <span>© 2026 Taezzi · Built Nov 2026<span className="foot-long"> · Data: Applyhome (REB), LH, Seoul Housing Portal</span></span>
@@ -475,9 +504,11 @@ function pastSummary(n: Notice): string {
 }
 
 const V_LABEL = { likely: '조건 충족', check: '추가 확인', no: '조건 불충족' } as const;
+const V_ICON = { likely: '✓', check: '△', no: '✗' } as const;
+const STATUS_RANK: Record<ReceiptStatus, number> = { open: 0, upcoming: 1, unknown: 2, waiting: 3, closed: 4 };
 
-function NoticeCard({ n, today, verdict, saved, savedComplex, active, onClick, ad }: {
-  n: Notice; today: string; verdict?: Verdict; saved: boolean; savedComplex?: boolean; active: boolean; onClick: () => void; ad: boolean;
+function NoticeCard({ n, today, verdict, saved, savedComplex, more = 0, active, onClick, ad }: {
+  n: Notice; today: string; verdict?: Verdict; saved: boolean; savedComplex?: boolean; more?: number; active: boolean; onClick: () => void; ad: boolean;
 }) {
   const next = nextEvent(n, today);
   const dd = next ? dday(next.start, today) : null;
@@ -494,7 +525,8 @@ function NoticeCard({ n, today, verdict, saved, savedComplex, active, onClick, a
           {n.removedAt && <span className="tag danger">취소·삭제 의심</span>}
           {!n.removedAt && recentlyChanged(n, today) && <span className="tag warn">일정 변경</span>}
           {!n.removedAt && !recentlyChanged(n, today) && n.corrected && <span className="tag warn">정정</span>}
-          {verdict && <span className={`pill ${verdict}`}>{V_LABEL[verdict]}</span>}
+          {more > 0 && <span className="tag more" title="같은 단지의 다른 공고(정정·무순위 등)는 상세 맨 아래에서 볼 수 있습니다">같은 단지 +{more}건</span>}
+          {verdict && <span className={`pill ${verdict}`}>{V_ICON[verdict]} {V_LABEL[verdict]}</span>}
           {saved && <span className="star">★</span>}
         </div>
         <b className="card-title">{n.name}</b>

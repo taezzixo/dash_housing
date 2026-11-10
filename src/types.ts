@@ -133,6 +133,10 @@ export interface Profile {
   carValue: number; // 자동차 가액(만원)
   netAssets: number; // 총자산-부채(만원)
   preferredRegions: string[];
+  preferredArea?: string; // 관심 면적 (AREA_BUCKETS key) — 적합도 별점용
+  preferredPrice?: string; // 관심 가격 (PRICE_BUCKETS key) — 적합도 별점용
+  dependents?: number; // 가점용 부양가족 수 (본인 제외). 비우면 배우자·자녀로 추정
+  homelessSinceYear?: number; // 가점용 무주택 시작 연도 (주택 처분 연도 등). 비우면 만 30세·혼인 중 빠른 해
   saved: string[]; // 관심 공고 id
 }
 

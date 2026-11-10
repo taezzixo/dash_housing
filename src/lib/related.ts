@@ -35,3 +35,49 @@ export function findRelated(n: Notice, all: Notice[]): Notice[] {
     })
     .sort((a, b) => (b.dates.announce ?? '').localeCompare(a.dates.announce ?? ''));
 }
+
+// ---- F9 목록 묶기: 단지당 1건 대표 + "+N건" ----
+// 괄호 속 블록 번호(A-6BL, L2블록 등)는 complexKey가 지우므로, 다른 블록 단지가 합쳐지지 않게 따로 붙인다.
+export function blockTag(name: string): string {
+  const m = name.match(/([A-Z]{1,2})\s*-?\s*(\d+(?:-\d+)*)\s*(?:BL|블록|블럭)/i);
+  return m ? `${m[1].toUpperCase()}${m[2]}` : '';
+}
+
+export function groupKey(n: Notice): string {
+  const k = complexKey(n.name);
+  if (k.length < 3) return `id:${n.id}`; // 이름이 너무 짧으면 묶지 않는다
+  return `${n.region ?? ''}|${k}|${blockTag(n.name)}`;
+}
+
+export interface NoticeGroup {
+  lead: Notice; // 대표 공고
+  others: Notice[]; // 같은 단지의 나머지 공고
+}
+
+/**
+ * 같은 단지 공고를 1건으로 묶는다. 대표는 접수 상태 우선순위(접수중 → 접수예정 → 일정확인 → 계약 대기 → 지난 공고),
+ * 같으면 최근 공고. 목록 순서는 각 묶음에서 원래 목록에 가장 먼저 나온 공고의 자리를 따른다(정렬 유지).
+ */
+export function groupByComplex(list: Notice[], rank: (n: Notice) => number): NoticeGroup[] {
+  const groups = new Map<string, Notice[]>();
+  for (const n of list) {
+    const k = groupKey(n);
+    const g = groups.get(k);
+    if (g) g.push(n);
+    else groups.set(k, [n]);
+  }
+  return [...groups.values()].map((g) => {
+    const sorted = [...g].sort((a, b) => rank(a) - rank(b) || (b.dates.announce ?? '').localeCompare(a.dates.announce ?? ''));
+    return { lead: sorted[0], others: sorted.slice(1) };
+  });
+}
+
+/** 같은 단지 다른 공고의 유형 라벨 (F9): 정정 / 무순위 / 임의공급 / 추가모집 / 최초분양·모집 */
+export function relatedKind(n: Notice): string {
+  const t = `${n.name} ${n.subType ?? ''}`;
+  if (n.corrected || /정정/.test(t)) return '정정';
+  if (n.category === 'OPT' || /임의\s*공급/.test(t)) return '임의공급';
+  if (n.category === 'REMNDR' || /무순위|잔여|재공급/.test(t)) return '무순위';
+  if (/추가\s*(모집|입주자)/.test(t)) return '추가모집';
+  return /임대/.test(t) ? '최초모집' : '최초분양';
+}

@@ -1,6 +1,8 @@
 import type { Profile } from '../types.ts';
 import { REGIONS } from '../lib/profile.ts';
 import { income100, CRITERIA_AS_OF } from '../config/criteria.ts';
+import { AREA_BUCKETS, PRICE_BUCKETS } from '../lib/filters.ts';
+import { dependentsOf, homelessStartYear } from '../lib/score.ts';
 
 interface Props {
   profile: Profile;
@@ -64,6 +66,13 @@ export function ProfileForm({ profile: p, persisted, onChange, onPersist, onSear
       </fieldset>
 
       <fieldset>
+        <legend>가점 계산 (선택)</legend>
+        <label>부양가족 수 (본인 제외)<input {...num('dependents')} placeholder={`비우면 ${dependentsOf({ ...p, dependents: undefined }).count}명으로 추정`} /></label>
+        <label>무주택 시작 연도<input {...num('homelessSinceYear')} placeholder={homelessStartYear({ ...p, homelessSinceYear: undefined }) ? `비우면 ${homelessStartYear({ ...p, homelessSinceYear: undefined })}년` : '예: 2021'} /></label>
+        <small className="muted span2">무주택기간은 만 30세가 된 해와 혼인한 해 중 빠른 해부터 계산합니다. 주택을 판 적이 있으면 판 해를 넣으세요. 부양가족은 배우자, 같은 세대 자녀, 3년 이상 같은 세대인 부모님을 셉니다.</small>
+      </fieldset>
+
+      <fieldset>
         <legend>청약통장</legend>
         <label>가입 기간(개월)<input {...num('accountMonths')} /></label>
         <label>납입 인정 횟수<input {...num('accountPayments')} /></label>
@@ -82,7 +91,13 @@ export function ProfileForm({ profile: p, persisted, onChange, onPersist, onSear
       </fieldset>
 
       <fieldset>
-        <legend>관심 지역</legend>
+        <legend>관심 지역·면적·가격</legend>
+        <label>관심 면적
+          <select value={p.preferredArea ?? ''} onChange={(e) => set('preferredArea', e.target.value || undefined)}>{AREA_BUCKETS.map((b) => <option key={b.key} value={b.key}>{b.key ? b.label : '상관없음'}</option>)}</select>
+        </label>
+        <label>관심 가격
+          <select value={p.preferredPrice ?? ''} onChange={(e) => set('preferredPrice', e.target.value || undefined)}>{PRICE_BUCKETS.map((b) => <option key={b.key} value={b.key}>{b.key ? b.label : '상관없음'}</option>)}</select>
+        </label>
         <div className="chips">
           {REGIONS.map((r) => {
             const on = p.preferredRegions.includes(r);
