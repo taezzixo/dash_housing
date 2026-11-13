@@ -53,4 +53,6 @@ npm run dev
 - 테스트는 `npm test`로 실행합니다. 자격판정 규칙을 검사합니다.
 
 ## 관리자
-[docs/ADMIN.md](docs/ADMIN.md)를 참고하세요. 관리자페이지(`/admin.html`), 수동 보정(`public/data/overrides.json`), Cloudflare Access 설정을 다룹니다.
+[docs/ADMIN.md](docs/ADMIN.md)를 참고하세요.
+
+ 관리자페이지(`/admin.html`), 수동 보정(`public/data/overrides.json`), Cloudflare Access 설정을 다룹니다.

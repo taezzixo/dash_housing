@@ -41,7 +41,7 @@ npm run fetch:data     # 공고 수집 (DATA_GO_KR_KEY, KAKAO_REST_KEY 환경변
 - `public/data/` — `notices.json`(진행 중 공고), `archive.json`(끝난 공고 1년), `run-log.json`(수집 기록), `overrides.json`(관리자 수동 보정)
 - `data/geocache.json` — 주소 좌표 캐시 (수집 때마다 자동 갱신)
 - `supabase/schema.sql` — 계정 저장 테이블·보안 정책(RLS)·탈퇴·집계 함수
-- `docs/` — `ADMIN.md`(관리자 사용법), `ACCOUNT.md`(계정 설정), `API_KEYS.md`(키 목록, 값 없음)
+- `docs/` — `ARCHITECTURE.md`(시스템 구성도·새 대시보드용 기본 구성도), `ADMIN.md`(관리자 사용법), `ACCOUNT.md`(계정 설정), `API_KEYS.md`(키 목록, 값 없음)
 
 ## 데이터 규칙
 - 공고 식별자 `id`는 출처별로 고정입니다(`ah-…`, `lh-…`, `ys-…`, `manual-…`). 바꾸면 저장된 관심 공고와 링크가 깨집니다.
